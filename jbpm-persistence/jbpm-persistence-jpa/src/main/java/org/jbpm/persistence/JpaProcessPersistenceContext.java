@@ -20,10 +20,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 import javax.persistence.EntityManager;
+import javax.persistence.FlushModeType;
 import javax.persistence.NoResultException;
 import javax.persistence.NonUniqueResultException;
 import javax.persistence.PersistenceException;
 import javax.persistence.Query;
+import javax.persistence.TypedQuery;
 
 import org.drools.persistence.api.TransactionManager;
 import org.drools.persistence.api.TransactionManagerHelper;
@@ -147,5 +149,16 @@ public class JpaProcessPersistenceContext extends JpaPersistenceContext
             return null;
         }
     }
-    
+
+	public String getProcessInstanceIdsPath(Long processId) {
+    	EntityManager em  = getEntityManager();
+    	TypedQuery<String> query = em.createQuery("select processInstanceIdsPath from " + ProcessInstanceInfo.class.getName() + " pi where processInstanceId = :processInstanceId", String.class);
+    	query.setFlushMode(FlushModeType.COMMIT);
+    	query.setParameter("processInstanceId", processId);
+    	List<String> resultList = query.getResultList();
+    	if (resultList.size() == 0 || resultList.get(0) == null)
+    		return null;
+    	return resultList.get(0);
+	}
+
 }

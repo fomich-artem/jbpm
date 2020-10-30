@@ -97,4 +97,12 @@ public class MapBasedProcessPersistenceContext extends MapBasedPersistenceContex
     	PersistentProcessInstance piInfo = this.processInstancesByBusinessKey.get(correlationKey);
         return piInfo.getId();
     }
+
+	public String getProcessInstanceIdsPath(Long processId) {
+		PersistentProcessInstance piInfo = findProcessInstanceInfo(processId);
+		if (piInfo == null)
+			return null;
+		return piInfo.getProcessInstanceIdsPath();
+	}
+
 }

@@ -54,7 +54,11 @@ import org.slf4j.LoggerFactory;
 public abstract class ProcessInstanceImpl implements ProcessInstance, Serializable {
 	private static final Logger logger = LoggerFactory.getLogger(ProcessInstanceImpl.class);
 	private static final long serialVersionUID = 510l;
-	
+
+	public static final String PARENT_PROCESS_INSTANCE_ID_METADATA = "ParentProcessInstanceId";
+	public static final String PROCESS_INSTANCE_IDS_PATH_METADATA = "ProcessInstanceIdsPath";
+	public static final String PROCESS_INSTANCE_IDS_PATH_SEPARATOR = ";";
+
 	private long id;
     private String processId;
     private transient Process process;
@@ -76,7 +80,15 @@ public abstract class ProcessInstanceImpl implements ProcessInstance, Serializab
         return this.id;
     }
 
-    public void setProcess(final Process process) {
+    public String getProcessInstanceIdsPath() {
+		return (String) metaData.get(PROCESS_INSTANCE_IDS_PATH_METADATA);
+	}
+
+	public void setProcessInstanceIdsPath(String processInstanceIdsPath) {
+		metaData.put(PROCESS_INSTANCE_IDS_PATH_METADATA, processInstanceIdsPath);
+	}
+
+	public void setProcess(final Process process) {
         this.processId = process.getId();
         this.process = ( Process ) process;
     }
@@ -109,6 +121,9 @@ public abstract class ProcessInstanceImpl implements ProcessInstance, Serializab
         if (this.process == null) {
         	if (processXml == null) {
         		if (kruntime == null) {
+        	        System.out.println("getProcess() NPE... kruntime = null");
+                    System.out.println("latestDisconnectStackTrace:");
+        	        latestDisconnectStackTraceContainer.printStackTrace();
                     throw new IllegalStateException("Process instance " + id + "[" + processId + "] is disconnected.");
         		}
         		this.process = kruntime.getKieBase().getProcess(processId);
@@ -152,6 +167,9 @@ public abstract class ProcessInstanceImpl implements ProcessInstance, Serializab
     public void setKnowledgeRuntime(final InternalKnowledgeRuntime kruntime) {
         if ( this.kruntime != null ) {
             throw new IllegalArgumentException( "Runtime can only be set once." );
+        }
+        if (kruntime == null) {
+        	throw new IllegalArgumentException("Argument 'kruntime' cannot be null");
         }
         this.kruntime = kruntime;
     }
@@ -250,8 +268,11 @@ public abstract class ProcessInstanceImpl implements ProcessInstance, Serializab
     }
     
     protected abstract void internalStart(String trigger);
+
+    private transient Throwable latestDisconnectStackTraceContainer;
     
     public void disconnect() {
+    	latestDisconnectStackTraceContainer = new Exception();
         ((InternalProcessRuntime) kruntime.getProcessRuntime()).getProcessInstanceManager().internalRemoveProcessInstance(this);
         process = null;
         kruntime = null;

@@ -36,4 +36,6 @@ public interface ProcessPersistenceContext
     List<Long> getProcessInstancesWaitingForEvent(String type);
     
     Long getProcessInstanceByCorrelationKey(CorrelationKey correlationKey);
+
+    String getProcessInstanceIdsPath(Long processId);
 }

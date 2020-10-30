@@ -203,6 +203,14 @@
       <artifactId>jboss-jaxb-api_2.3_spec</artifactId>
       <scope>provided</scope>
     </dependency>
+
+    <!-- openicar dependencies -->
+    <dependency>
+      <groupId>org.jboss.seam</groupId>
+      <artifactId>jboss-seam</artifactId>
+      <type>ejb</type>
+      <scope>provided</scope>
+    </dependency>
   </dependencies>
 
 </project>

@@ -30,4 +30,6 @@ public interface PersistentProcessInstance extends Transformable {
 
 	byte[] getProcessInstanceByteArray();
 
+    String getProcessInstanceIdsPath();
+
 }

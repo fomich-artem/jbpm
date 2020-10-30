@@ -69,6 +69,8 @@ public class ProcessInstanceInfo implements PersistentProcessInstance {
     @Column(name = "OPTLOCK")
     private int                               version;
 
+    private String                            processInstanceIdsPath;
+
     private String                            processId;
     private Date                              startDate;
     private Date                              lastReadDate;
@@ -135,6 +137,14 @@ public class ProcessInstanceInfo implements PersistentProcessInstance {
         this.processInstanceId = processInstanceId;
     }
 
+    public String getProcessInstanceIdsPath() {
+		return processInstanceIdsPath;
+	}
+
+	public void setProcessInstanceIdsPath(String processInstanceIdsPath) {
+		this.processInstanceIdsPath = processInstanceIdsPath;
+	}
+
     public String getProcessId() {
         return processId;
     }
@@ -187,13 +197,13 @@ public class ProcessInstanceInfo implements PersistentProcessInstance {
             	context.setWorkingMemory( ((StatefulKnowledgeSessionImpl) kruntime).getInternalWorkingMemory() );
                 processInstance = marshaller.readProcessInstance(context);
                 ((WorkflowProcessInstanceImpl) processInstance).setPersisted(false);
-                if (readOnly) {
+                if (readOnly && !JPAProcessInstanceManager.READONLY_DISABLED) {
                     ((WorkflowProcessInstanceImpl) processInstance).disconnect();
                 }
                 context.close();
             } catch ( IOException e ) {
                 e.printStackTrace();
-                throw new IllegalArgumentException( "IOException while loading process instance: " + e.getMessage(),
+                throw new IllegalArgumentException( "IOException while loading process instance " + getId() + ": " + e.getMessage(),
                                                     e );
             }
         }
@@ -252,6 +262,8 @@ public class ProcessInstanceInfo implements PersistentProcessInstance {
         byte[] newByteArray = baos.toByteArray();
         if ( variablesChanged || !Arrays.equals( newByteArray,
                                                  processInstanceByteArray ) ) {
+        	this.processId = processInstance.getProcessId(); // migration issue
+        	this.processInstanceIdsPath = ((ProcessInstanceImpl)processInstance).getProcessInstanceIdsPath();
             this.state = processInstance.getState();
             this.lastModificationDate = new Date();
             this.processInstanceByteArray = newByteArray;
