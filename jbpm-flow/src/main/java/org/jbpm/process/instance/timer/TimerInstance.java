@@ -41,6 +41,7 @@ public class TimerInstance implements Serializable{
     private long sessionId;
     private String cronExpression;
     private String name;
+    private boolean converted = false;
     
     public long getId() {
         return id;
@@ -142,7 +143,15 @@ public class TimerInstance implements Serializable{
     public String toString() {
         return "TimerInstance [id=" + id + ", name=" + name + ", timerId=" + timerId + ", delay=" + delay + ", period=" + period + ", jobHandle=" + jobHandle + ", activated=" + activated + ", lastTriggered=" +
                lastTriggered + ", processInstanceId=" + processInstanceId
-               + "]";
+               + ", converted=" + converted + "]";
+    }
+
+    public boolean isConverted() {
+        return converted;
+	}
+
+	public void setConverted(boolean converted) {
+        this.converted = converted;
     }
 
 }

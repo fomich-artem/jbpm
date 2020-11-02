@@ -42,10 +42,13 @@ import org.drools.core.time.impl.CronTrigger;
 import org.drools.core.time.impl.IntervalTrigger;
 import org.jbpm.marshalling.impl.JBPMMessages;
 import org.jbpm.marshalling.impl.ProtobufProcessMarshaller;
+import org.jbpm.openicar.TimerStoreService;
+import org.jbpm.openicar.TimerStoreServiceLocator;
 import org.jbpm.process.core.timer.impl.RegisteredTimerServiceDelegate;
 import org.jbpm.process.instance.InternalProcessRuntime;
 import org.jbpm.process.instance.ProcessInstance;
 import org.jbpm.process.instance.ProcessRuntimeImpl;
+import org.kie.api.openicar.KnowledgeServiceLocator;
 import org.kie.api.runtime.KieSession;
 import org.kie.api.time.SessionClock;
 import org.kie.internal.runtime.StatefulKnowledgeSession;
@@ -59,11 +62,13 @@ public class TimerManager {
 
     private static final Logger logger = LoggerFactory.getLogger(TimerManager.class);
 
-    private long timerId = 0;
+    //private long timerId = 0;
 
     private InternalKnowledgeRuntime kruntime;
     private TimerService timerService;
-    private Map<Long, TimerInstance> timers = new ConcurrentHashMap<Long, TimerInstance>();
+    //private Map<Long, TimerInstance> timers = new ConcurrentHashMap<Long, TimerInstance>();
+    private Map<String, Long> timerIdConvertMap = new ConcurrentHashMap<String, Long>();
+
     public static final Job processJob = new ProcessJob();
     public static final Job startProcessJob = new StartProcessJob();
 
@@ -72,14 +77,29 @@ public class TimerManager {
         this.timerService = timerService;
     }
 
+    public Map<String, Long> getTimerIdConvertMap() {
+		return timerIdConvertMap;
+	}
+
+    public TimerStoreService getTimerStoreService() {
+    	return TimerStoreServiceLocator.getInstance();
+    }
+
+    public boolean isStarting() {
+    	return !KnowledgeServiceLocator.getInstance().isStarted();
+    }
+
     public void registerTimer(final TimerInstance timer, ProcessInstance processInstance) {
         try {
+            TimerStoreService store = getTimerStoreService();
+
             kruntime.startOperation();
 
-            timer.setId(++timerId);
+            timer.setId( store.generateTimerId(timer) );
             timer.setProcessInstanceId(processInstance.getId());
             timer.setSessionId(((KieSession) kruntime).getIdentifier());
             timer.setActivated(new Date());
+            timer.setConverted(true);
             
             Trigger trigger = null;
             
@@ -97,7 +117,8 @@ public class TimerManager {
             JobHandle jobHandle = this.timerService.scheduleJob(processJob, ctx, trigger);
 
             timer.setJobHandle(jobHandle);
-            timers.put(timer.getId(), timer);
+            //timers.put(timer.getId(), timer);
+            store.persistTimer(timer, kruntime.getEnvironment());
         } finally {
             kruntime.endOperation();
         }
@@ -105,12 +126,15 @@ public class TimerManager {
 
     public void registerTimer(final TimerInstance timer, String processId, Map<String, Object> params) {
         try {
+            TimerStoreService store = getTimerStoreService();
+
             kruntime.startOperation();
 
-            timer.setId(++timerId);
+            timer.setId( store.generateTimerId(timer) );
             timer.setProcessInstanceId(-1l);
             timer.setSessionId(((StatefulKnowledgeSession) kruntime).getIdentifier());
             timer.setActivated(new Date());
+            timer.setConverted(true);
 
             Trigger trigger = null;
 
@@ -128,13 +152,19 @@ public class TimerManager {
             JobHandle jobHandle = this.timerService.scheduleJob(startProcessJob, ctx, trigger);
 
             timer.setJobHandle(jobHandle);
-            timers.put(timer.getId(), timer);
+            //timers.put(timer.getId(), timer);
+            store.persistTimer(timer, kruntime.getEnvironment());
         } finally {
             kruntime.endOperation();
         }
     }
 
     public void internalAddTimer(final TimerInstance timer) {
+    	if (timer.getJobHandle() != null) {
+    		getTimerStoreService().internalAddTimer(timer);
+    		return;
+    	}
+
         long delay;
         Date lastTriggered = timer.getLastTriggered();
         if (lastTriggered == null) {
@@ -158,15 +188,19 @@ public class TimerManager {
 
         JobHandle jobHandle = this.timerService.scheduleJob(processJob, ctx, trigger);
         timer.setJobHandle(jobHandle);
-        timers.put(timer.getId(), timer);
+        //timers.put(timer.getId(), timer);
+
+        getTimerStoreService().internalAddTimer(timer);
     }
 
     public void cancelTimer(long timerId) {
+		TimerStoreService store = getTimerStoreService();
 		try {
 			kruntime.startOperation();
 
-			TimerInstance timer = timers.remove(timerId);
+			TimerInstance timer = store.getTimer(timerId) /*timers.remove( timerId )*/;
 			if (timer != null) {
+				store.removeTimer(timer);
 				timerService.removeJob(timer.getJobHandle());
 			}
 		} finally {
@@ -182,11 +216,13 @@ public class TimerManager {
             timers.clear();
             return;
         }
+        /*
         for (Iterator<TimerInstance> it = timers.values().iterator(); it.hasNext();) {
             TimerInstance timer = it.next();
             timerService.removeJob(timer.getJobHandle());
             it.remove();
         }
+         */
         timerService.shutdown();
     }
 
@@ -195,19 +231,20 @@ public class TimerManager {
     }
 
     public Collection<TimerInstance> getTimers() {
-        return timers.values();
+        return Collections.emptyList(); //timers.values(); // FIXME
     }
 
     public Map<Long, TimerInstance> getTimerMap() {
-        return this.timers;
+        return Collections.emptyMap(); //this.timers; // FIXME
     }
 
-    public long internalGetTimerId() {
-        return timerId;
-    }
+    public void convertTimer(MarshallerReaderContext inCtx, TimerInstance timer, long processInstanceId) {
+        getTimerStoreService().convertTimer(this, inCtx, timer, processInstanceId);
+	}
 
-    public void internalSetTimerId(long timerId) {
-        this.timerId = timerId;
+    public String getTimerIdConvertMapKey(TimerInstance timer, long processInstanceId) {
+        String timerIdConvertMapKey = processInstanceId + "#" + timer.getId();
+        return timerIdConvertMapKey;
     }
 
     public void setTimerService(TimerService timerService) {
@@ -250,29 +287,41 @@ public class TimerManager {
 
             TimerManager tm = ((InternalProcessRuntime) inCtx.getWorkingMemory().getProcessRuntime()).getTimerManager();
 
+            //long oldId = timerInstance.getId();
+            String timerIdConvertMapKey = tm.getTimerIdConvertMapKey(timerInstance, processInstanceId);
+
+            boolean converted = timerInstance.isConverted();
+
             // check if the timer instance is not already registered to avoid duplicated timers
-            if (!tm.getTimerMap().containsKey(timerInstance.getId())) {
+            if (!tm.getTimerIdConvertMap().containsKey(timerIdConvertMapKey) || converted) {
+                if (!converted)
+                    tm.convertTimer(inCtx, timerInstance, processInstanceId);
+
                 ProcessJobContext pctx = new ProcessJobContext(timerInstance, trigger, processInstanceId,
                         inCtx.getWorkingMemory().getKnowledgeRuntime(), false);
                 Date date = trigger.hasNextFireTime();
-
+                
                 if (date != null) {
                     long then = date.getTime();
                     long now = pctx.getKnowledgeRuntime().getSessionClock().getCurrentTime();
                     // overdue timer                    
-                    if (then < now) {
+                    if (then < (now + OverdueTrigger.OVERDUE_DELAY * 2) || tm.isStarting()) {
                         trigger = new OverdueTrigger(trigger);
                     }
                 }
                 trigger.initialize(pctx.getKnowledgeRuntime());
                 JobHandle jobHandle = ts.scheduleJob(processJob, pctx, trigger);
-                timerInstance.setJobHandle(jobHandle);
-                pctx.setJobHandle(jobHandle);
-
-                tm.getTimerMap().put(timerInstance.getId(), timerInstance);
+                timerInstance.setJobHandle( jobHandle );
+                pctx.setJobHandle( jobHandle );   
+                
+                
+                /*
+                tm.getTimerMap().put(timerInstance.getId(), timerInstance );
+                 */
+                tm.internalAddTimer(timerInstance);
             }
         }
-    }
+    }    
 
     public static class ProcessJob implements Job, Serializable {
 
@@ -301,17 +350,23 @@ public class TimerManager {
                 
                 ((InternalProcessRuntime) kruntime.getProcessRuntime()).getSignalManager().signalEvent(processInstanceId,
                         "timerTriggered", ctx.getTimer());
+                // openicar way
+                //KnowledgeServiceLocator.getInstance().getStatefulKnowledgeSession().signalEvent("timerTriggered", ctx.getTimer(), processInstanceId); 
 
                 TimerManager tm = ((InternalProcessRuntime) ctx.getKnowledgeRuntime().getProcessRuntime()).getTimerManager();
 
                 if (ctx.getTimer().getPeriod() == 0) {
-                    tm.getTimerMap().remove(ctx.getTimer().getId());
+                    //tm.getTimerMap().remove(ctx.getTimer().getId());
+                    tm.getTimerStoreService().removeTimer(ctx.getTimer());
                     tm.getTimerService().removeJob(ctx.getJobHandle());
                 }
 
             } catch (Throwable e) {
+                throw e;
+                /*
                 logger.error("Error when executing timer job", e);
                 throw new RuntimeException(e);
+                 */
             } finally {
                 kruntime.endOperation();
             }
@@ -350,7 +405,8 @@ public class TimerManager {
                 ((ProcessRuntimeImpl)kruntime.getProcessRuntime()).startProcess(ctx.getProcessId(), ctx.getParamaeters(), "timer");
 
                 if (ctx.getTimer().getPeriod() == 0) {
-                    tm.getTimerMap().remove(ctx.getTimer().getId());
+                    //tm.getTimerMap().remove(ctx.getTimer().getId());
+                    tm.getTimerStoreService().removeTimer(ctx.getTimer());
                     tm.getTimerService().removeJob(ctx.getJobHandle());
                 }
 
@@ -483,7 +539,7 @@ public class TimerManager {
 
         private static final long serialVersionUID = -2368476147776308013L;
 
-        public static final long OVERDUE_DELAY = Long.parseLong(System.getProperty("jbpm.overdue.timer.delay", "2000"));
+        public static /*final */long OVERDUE_DELAY = Long.parseLong(System.getProperty("jbpm.overdue.timer.delay", "2000"));
 
         private Trigger orig;
         private transient InternalKnowledgeRuntime kruntime;
@@ -522,5 +578,16 @@ public class TimerManager {
         }
 
     }
+
+    @Deprecated
+	public long internalGetTimerId() {
+    	// nothing to do
+		return 1;
+	}
+
+	@Deprecated
+	public void internalSetTimerId(long timerId) {
+		// nothing to do
+	}
 
 }
