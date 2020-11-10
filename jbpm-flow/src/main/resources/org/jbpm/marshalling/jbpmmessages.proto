@@ -41,15 +41,15 @@ message ProcessInstance {
     optional string process_id = 3;
     optional int32 state = 4;
     optional int64 node_instance_counter = 5;
-    optional string process_xml = 11;
+    optional string process_xml = 15;     // original value is 11, that was conflict with field 'metadata'
     optional int64 parent_process_instance_id = 12;
-    optional string description = 15;
-    optional bool signal_completion = 16 [default = true];
-    optional string deploymentId = 17;
-    optional string correlation_key = 18;
-    optional int64 sla_timer_id = 19;
-    optional int64 sla_due_date = 20;
-    optional int32 sla_compliance = 21;
+    optional string description = 16;     // original value is 15
+    optional bool signal_completion = 17 [default = true]; // original value is 16
+    optional string deploymentId = 18;    // original value is 17
+    optional string correlation_key = 19; // original value is 18
+    optional int64 sla_timer_id = 20;     // original value is 19
+    optional int64 sla_due_date = 21;     // original value is 20
+    optional int32 sla_compliance = 22;   // original value is 21
 
     repeated SwimlaneContextInstance swimlane_context = 6;
     repeated NodeInstance node_instance = 7;
@@ -57,6 +57,8 @@ message ProcessInstance {
     repeated ExclusiveGroupInstance exclusive_group = 10;
     repeated string completedNodeIds = 13;
     repeated IterationLevel iterationLevels = 14;
+
+    repeated StringToObjectMapEntry metadata = 11; // OpenIcar defined field
 
     message SwimlaneContextInstance {
         optional string swimlane = 1;
@@ -170,6 +172,13 @@ message Variable {
     optional bytes value = 3;
 }
 
+message StringToObjectMapEntry {
+    optional string key = 1;
+    // the actual object reference
+    optional int32 strategy_index = 2;
+    optional bytes value = 3;
+}
+
 extend org.drools.serialization.protobuf.Timers.Timer {
     optional ProcessTimer proc_timer = 100;
 }
@@ -199,10 +208,11 @@ message ProcessTimer {
         optional int64 process_instance_id = 5;
         optional int64 activated_time = 6;
         optional int64 last_triggered = 7;
-        optional int32 DEPRECATED_sessionId = 8;
-        optional int64 sessionId = 9;
-        optional int32 repeatLimit = 10;
-        optional string name=11;
+        optional bool converted = 8;             // OpenIcar defined field
+        optional int32 DEPRECATED_sessionId = 9; // original value is 8, that was conflict with field 'converted'
+        optional int64 sessionId = 10;           // original value is 9
+        optional int32 repeatLimit = 11;         // original value is 10
+        optional string name=12;                 // original value is 11
     }
 }
 

@@ -33,12 +33,16 @@ import org.drools.core.common.InternalWorkingMemory;
 import org.drools.core.marshalling.impl.MarshallerReaderContext;
 import org.drools.core.marshalling.impl.MarshallerWriteContext;
 import org.drools.core.marshalling.impl.ProcessMarshaller;
+import org.drools.core.marshalling.impl.SerializablePlaceholderResolverStrategy;
 import org.drools.core.process.instance.WorkItemManager;
 import org.drools.core.process.instance.impl.WorkItemImpl;
 import org.drools.serialization.protobuf.PersisterHelper;
 import org.drools.serialization.protobuf.ProtobufMessages;
 import org.drools.serialization.protobuf.ProtobufMessages.Header;
+import org.jboss.seam.log.Log;
+import org.jboss.seam.log.Logging;
 import org.jbpm.marshalling.impl.JBPMMessages.ProcessTimer.TimerInstance.Builder;
+import org.jbpm.marshalling.impl.JBPMMessages.StringToObjectMapEntry;
 import org.jbpm.marshalling.impl.JBPMMessages.Variable;
 import org.jbpm.marshalling.impl.JBPMMessages.VariableContainer;
 import org.jbpm.process.instance.InternalProcessRuntime;
@@ -47,6 +51,9 @@ import org.jbpm.process.instance.timer.TimerManager;
 import org.jbpm.process.instance.timer.TimerManager.ProcessJobContext;
 import org.jbpm.process.instance.timer.TimerManager.StartProcessJobContext;
 import org.kie.api.marshalling.ObjectMarshallingStrategy;
+import org.kie.api.openicar.KnowledgeServiceLocator;
+import org.kie.api.openicar.variable.VariableService;
+import org.kie.api.openicar.variable.VariableValueWrapper;
 import org.kie.api.runtime.process.ProcessInstance;
 import org.kie.api.runtime.process.WorkItem;
 
@@ -59,6 +66,8 @@ public class ProtobufProcessMarshaller
 	public static void setWorkItemVarsPersistence(boolean turnOn) {
 		persistWorkItemVars = turnOn;
 	}
+
+	protected static Log log = Logging.getLog(ProtobufProcessMarshaller.class);
 
     public void writeProcessInstances(MarshallerWriteContext context) throws IOException {
         ProtobufMessages.ProcessData.Builder _pdata = (ProtobufMessages.ProcessData.Builder) context.getParameterObject();
@@ -170,6 +179,7 @@ public class ProtobufProcessMarshaller
                 .setPeriod( timer.getPeriod() )
                 .setProcessInstanceId( timer.getProcessInstanceId() )
                 .setActivatedTime( timer.getActivated().getTime() )
+                .setConverted(timer.isConverted())
                 .setRepeatLimit(timer.getRepeatLimit());
         String name = timer.getName(); 
         if (name != null) {
@@ -201,6 +211,9 @@ public class ProtobufProcessMarshaller
         }
         timer.setRepeatLimit(_timer.getRepeatLimit());
         timer.setName(_timer.getName());
+        if (_timer.hasConverted()) {
+        	timer.setConverted(_timer.getConverted());
+        }
         return timer;
     }
 
@@ -253,6 +266,7 @@ public class ProtobufProcessMarshaller
             for ( JBPMMessages.Variable _variable : _workItem.getVariableList() ) {
                 try {
                     Object value = unmarshallVariableValue( context, _variable );
+                    if (value instanceof VariableValueWrapper) throw new IllegalStateException("please rewrite me (readWorkItem)!!!");
                     workItem.setParameter( _variable.getName(),
                                            value );
                 } catch ( ClassNotFoundException e ) {
@@ -270,6 +284,16 @@ public class ProtobufProcessMarshaller
         JBPMMessages.Variable.Builder builder = JBPMMessages.Variable.newBuilder().setName( name );
         if(value != null){
             ObjectMarshallingStrategy strategy = context.getObjectMarshallingStrategyStore().getStrategyObject( value );
+
+            VariableService variableService = KnowledgeServiceLocator.getInstance(VariableService.class);
+
+            if (!(value instanceof VariableValueWrapper)) {
+                log.debug("convert variable to VariableValueWrapper: name = #0, from value = #1", name, value);
+                value = variableService.wrapVariable(value);
+            } else {
+                log.debug("variable is already VariableValueWrapper of type #0", value.getClass().getCanonicalName());
+            }
+
             Integer index = context.getStrategyIndex( strategy );
             builder.setStrategyIndex( index )
                    .setValue( ByteString.copyFrom( strategy.marshal( context.getStrategyContext().get( strategy ),
@@ -280,16 +304,27 @@ public class ProtobufProcessMarshaller
     }
     
     public static Variable marshallVariablesMap(MarshallerWriteContext context, Map<String, Object> variables) throws IOException{
+        VariableService variableService = KnowledgeServiceLocator.getInstance(VariableService.class);
+
         Map<String, Variable> marshalledVariables = new HashMap<String, Variable>();
         for(String key : variables.keySet()){
             JBPMMessages.Variable.Builder builder = JBPMMessages.Variable.newBuilder().setName( key );
-            if(variables.get(key) != null){
-                ObjectMarshallingStrategy strategy = context.getObjectMarshallingStrategyStore().getStrategyObject( variables.get(key) );
+            Object value = variables.get(key);
+            if(value != null){
+                ObjectMarshallingStrategy strategy = context.getObjectMarshallingStrategyStore().getStrategyObject( value );
+
+                if (!(value instanceof VariableValueWrapper)) {
+                    log.debug("convert variable to VariableValueWrapper: name = #0, from value = #1", key, value);
+                    value = variableService.wrapVariable(value);
+                } else {
+                    log.debug("variable is already VariableValueWrapper of type #0", value.getClass().getCanonicalName());
+                }
+
                 Integer index = context.getStrategyIndex( strategy );
                 builder.setStrategyIndex( index )
                    .setValue( ByteString.copyFrom( strategy.marshal( context.getStrategyContext().get( strategy ),
                                                                      (ObjectOutputStream) context,
-                                                                     variables.get(key) ) ) );
+                                                                     value ) ) );
                 
             } 
                                      
@@ -302,16 +337,27 @@ public class ProtobufProcessMarshaller
     }
     
     public static VariableContainer marshallVariablesContainer(MarshallerWriteContext context, Map<String, Object> variables) throws IOException{
+        VariableService variableService = KnowledgeServiceLocator.getInstance(VariableService.class);
+
     	JBPMMessages.VariableContainer.Builder vcbuilder = JBPMMessages.VariableContainer.newBuilder();
         for(String key : variables.keySet()){
             JBPMMessages.Variable.Builder builder = JBPMMessages.Variable.newBuilder().setName( key );
-            if(variables.get(key) != null){
-                ObjectMarshallingStrategy strategy = context.getObjectMarshallingStrategyStore().getStrategyObject( variables.get(key) );
+            Object value = variables.get(key);
+            if(value != null){
+                ObjectMarshallingStrategy strategy = context.getObjectMarshallingStrategyStore().getStrategyObject( value );
+
+                if (!(value instanceof VariableValueWrapper)) {
+                    log.debug("convert variable to VariableValueWrapper: name = #0, from value = #1", key, value);
+                    value = variableService.wrapVariable(value);
+                } else {
+                    log.debug("variable is already VariableValueWrapper of type #0", value.getClass().getCanonicalName());
+                }
+
                 Integer index = context.getStrategyIndex( strategy );
                 builder.setStrategyIndex( index )
                    .setValue( ByteString.copyFrom( strategy.marshal( context.getStrategyContext().get( strategy ),
                                                                      ( ObjectOutputStream ) context,
-                                                                     variables.get(key) ) ) );
+                                                                     value ) ) );
                 
             } 
                                      
@@ -385,6 +431,33 @@ public class ProtobufProcessMarshaller
         } catch (ClassNotFoundException e) {
             throw new IllegalArgumentException( "ClassNotFoundException while fetching work item instance : " + e.getMessage(), e );
         }
+    }
+
+	public static StringToObjectMapEntry marshallStringToObjectMapEntry(MarshallerWriteContext context, Map.Entry<String, Object> mapEntry) throws IOException {
+        String sn = SerializablePlaceholderResolverStrategy.class.getName();
+        ObjectMarshallingStrategy strategy = context.getObjectMarshallingStrategyStore().getStrategyObject( sn );
+
+
+        Integer index = context.getStrategyIndex( strategy );
+        return JBPMMessages.StringToObjectMapEntry.newBuilder()
+                .setKey( mapEntry.getKey() )
+                .setStrategyIndex( index )
+                .setValue( ByteString.copyFrom( strategy.marshal( context.getStrategyContext().get( strategy ),
+                                                                  ( ObjectOutputStream ) context,
+                                                                  mapEntry.getValue() ) ) )
+                .build();
+	}
+
+    public static Map.Entry<String, Object> unmarshallStringToObjectMapEntry(MarshallerReaderContext context,
+                                                  JBPMMessages.StringToObjectMapEntry _mapEntry) throws IOException,
+                                                                                  ClassNotFoundException {
+        ObjectMarshallingStrategy strategy = context.getUsedStrategies().get( _mapEntry.getStrategyIndex() );
+        Object value = strategy.unmarshal( context.getStrategyContexts().get( strategy ),
+                                           ( ObjectInputStream) context,
+                                           _mapEntry.getValue().toByteArray(), 
+                                           (context.getKnowledgeBase() == null)?null:context.getKnowledgeBase().getRootClassLoader() );
+
+        return Collections.singletonMap(_mapEntry.getKey(), value).entrySet().iterator().next();
     }
 
 }
