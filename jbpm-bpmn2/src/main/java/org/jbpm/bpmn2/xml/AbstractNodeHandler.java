@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.jbpm.bpmn2.core.TextAnnotation;
 import org.drools.compiler.compiler.xml.XmlDumper;
 import org.drools.core.xml.BaseAbstractHandler;
 import org.drools.core.xml.ExtensibleXmlParser;
@@ -98,6 +99,7 @@ public abstract class AbstractNodeHandler extends BaseAbstractHandler implements
         this.validPeers.add(SequenceFlow.class);
         this.validPeers.add(Lane.class);
         this.validPeers.add(Association.class);
+	    this.validPeers.add(TextAnnotation.class);
     }
 
     public Object start(final String uri, final String localName, final Attributes attrs,
