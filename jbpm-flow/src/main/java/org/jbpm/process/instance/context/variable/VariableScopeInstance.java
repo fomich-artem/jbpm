@@ -20,9 +20,15 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
 
 import org.drools.core.ClassObjectFilter;
 import org.drools.core.event.ProcessEventSupport;
+import org.jboss.seam.contexts.Contexts;
+import org.jboss.seam.contexts.Lifecycle;
+import org.jboss.seam.log.Log;
+import org.jboss.seam.log.Logging;
 import org.jbpm.process.core.context.variable.Variable;
 import org.jbpm.process.core.context.variable.VariableScope;
 import org.jbpm.process.core.context.variable.VariableViolationException;
@@ -35,28 +41,46 @@ import org.kie.api.runtime.KieSession;
 import org.kie.api.runtime.process.CaseData;
 import org.kie.api.runtime.process.ProcessInstance;
 import org.kie.api.runtime.rule.FactHandle;
+import org.kie.api.openicar.KnowledgeServiceLocator;
+import org.kie.api.openicar.variable.VariableService;
+import org.kie.api.openicar.variable.VariableValueWrapper;
 
 /**
  * 
  */
 public class VariableScopeInstance extends AbstractContextInstance {
 
-    private static final long serialVersionUID = 510l;    
-    
-    private Map<String, Object> variables = new HashMap<String, Object>();
+    private static final long serialVersionUID = 511l;
+
+    private transient Log log = Logging.getLog(getClass());
+
+    /* Почему-то jbpm хранит кэш переменных, несмотря на директиву transient.
+     * Возможно jBPM вообще никогда не делает десериализацию VariableScopeInstance,
+     * а как-то иначе хранит переменные.
+     * private transient Map<String, Object> variables = new HashMap<String, Object>();
+     */
+
+    private Map<String, VariableValueWrapper> persistentVariables = new HashMap<String, VariableValueWrapper>();
+
     private transient String variableIdPrefix = null;
     private transient String variableInstanceIdPrefix = null;
 
+    @Override
     public String getContextType() {
         return VariableScope.VARIABLE_SCOPE;
     }
 
     public Object getVariable(String name) {
-                
-        Object value = variables.get(name);
+        
+        Object value;/* = variables.get(name);
         if (value != null) {
             return value;
         }
+         */
+        VariableValueWrapper processVariable = internalGetPersistentVariables().get(name);
+        if (processVariable != null)
+            return getProcessVariableValue(name, processVariable);
+         
 
         // support for processInstanceId and parentProcessInstanceId
         if ("processInstanceId".equals(name) && getProcessInstance() != null) {
@@ -89,23 +113,115 @@ public class VariableScopeInstance extends AbstractContextInstance {
         return null;
     }
 
+    protected Object getProcessVariableValue(String name, VariableValueWrapper processVariable) {
+        Object result = null;
+        if (processVariable != null)
+            try {
+                result = processVariable.getValue();
+            } catch (Exception e) {
+                log.error("failed getVariable(...) invocation..., variable name: #0, ProcessVariable: #1", e, name, processVariable);
+                throw e;
+            }
+        log.debug("getProcessVariableValue... read variable: name = #0, value = #1", name, result);
+        return result;
+    }
+
+    protected Map<String, Object> internalGetVariables() {
+        @SuppressWarnings("serial")
+        Map<String, Object> mutableMap = new HashMap<String, Object>(internalGetPersistentVariables()) {
+            int restoredCnt = 0;
+            @Override
+            public Object get(Object key) {
+                Object result = super.get(key);
+                if (result instanceof VariableValueWrapper) {
+                    result = getProcessVariableValue(String.valueOf(key), ((VariableValueWrapper) result));
+                    log.debug("getVariables() - lazy restoring variable: name = #0, value = #1", key, result);
+                    put((String)key, result);
+                    restoredCnt++;
+                }
+                return result;
+            }
+            protected void restoreAllVariables() {
+                int size = size();
+                if (size == 0 || size <= restoredCnt) return;
+                log.debug("getVariables() - lazy restoring all variable values...");
+                boolean appContextActive = Contexts.isApplicationContextActive();
+                if (!appContextActive) Lifecycle.beginCall();
+                try {
+                    for (Map.Entry<String, Object> entry : super.entrySet()) {
+                        if (entry.getValue() instanceof VariableValueWrapper) {    
+                            Object restoredValue = getProcessVariableValue(entry.getKey(), ((VariableValueWrapper)entry.getValue()));
+                            log.debug("\t - read variable: name = #0, value = #1", entry.getKey(), restoredValue);
+                            entry.setValue(restoredValue);
+                            restoredCnt++;
+                        }
+                    }
+                } finally {
+                    if (!appContextActive) Lifecycle.endCall();
+                }
+            }
+            @Override
+            public boolean containsValue(Object value) {
+                restoreAllVariables();
+                return super.containsValue(value);
+            }
+            @Override
+            public Object clone() {
+                restoreAllVariables();
+                return super.clone();
+            }
+            @Override
+            public Collection<Object> values() {
+                restoreAllVariables();
+                return super.values();
+            }
+            @Override
+            public Set<Entry<String, Object>> entrySet() {
+                restoreAllVariables();
+                return super.entrySet();
+            }
+        };
+        return mutableMap;
+    }
+
+    protected Map<String, VariableValueWrapper> internalGetPersistentVariables() {
+        if (persistentVariables == null) {
+            persistentVariables = new HashMap<String, VariableValueWrapper>();
+        }
+        return persistentVariables;
+    }
+
+    public Map<String, VariableValueWrapper> getPersistentVariables() {
+        return internalGetPersistentVariables();
+    }
+
     public Map<String, Object> getVariables() {
-        return Collections.unmodifiableMap(variables);
+        return Collections.unmodifiableMap(internalGetVariables());
     }
 
     public void setVariable(String name, Object value) {
         if (name == null) {
-            throw new IllegalArgumentException(
-                "The name of a variable may not be null!");
+            throw new IllegalArgumentException("The name of a variable may not be null!");
         }
-        Object oldValue = getVariable(name);
+        VariableService variableService = KnowledgeServiceLocator.getInstance(VariableService.class);
+        VariableValueWrapper oldValueProcessVariable = internalGetPersistentVariables().get(name);
+        VariableValueWrapper newValueProcessVariable = null;
+        if (value != null) {
+            newValueProcessVariable = variableService.wrapVariable(value);
+        }
+        if (oldValueProcessVariable == null || oldValueProcessVariable.isNull() || oldValueProcessVariable.equals(newValueProcessVariable)) {
+            if (value == null) {
+                return;
+            }
+        }
+        /*Object oldValue = getVariable(name);
         if (oldValue == null) {
         	if (value == null) {
         		return;
         	}
-        }
+        }*/
         // check if variable that is being set is readonly and has already been set
-        if (oldValue != null && !oldValue.equals(value) && getVariableScope().isReadOnly(name)) {
+        if (oldValueProcessVariable != null && !oldValueProcessVariable.isNull() && !oldValueProcessVariable.equals(newValueProcessVariable) && getVariableScope().isReadOnly(name)) {
             throw new VariableViolationException(getProcessInstance().getId(), name, "Variable '" + name + "' is already set and is marked as read only");
         }
         
@@ -114,16 +230,16 @@ public class VariableScopeInstance extends AbstractContextInstance {
     	processEventSupport.fireBeforeVariableChanged(
 			(variableIdPrefix == null ? "" : variableIdPrefix + ":") + name,
 			(variableInstanceIdPrefix == null? "" : variableInstanceIdPrefix + ":") + name,
-			oldValue, value, getVariableScope().tags(name), getProcessInstance(),
+			oldValueProcessVariable, newValueProcessVariable, getVariableScope().tags(name), getProcessInstance(),
 			getProcessInstance().getKnowledgeRuntime());
-        internalSetVariable(name, value);
+        internalSetVariable(name, newValueProcessVariable);
         processEventSupport.fireAfterVariableChanged(
 			(variableIdPrefix == null ? "" : variableIdPrefix + ":") + name,
 			(variableInstanceIdPrefix == null? "" : variableInstanceIdPrefix + ":") + name,
-    		oldValue, value, getVariableScope().tags(name), getProcessInstance(),
+    		oldValueProcessVariable, newValueProcessVariable, getVariableScope().tags(name), getProcessInstance(),
 			getProcessInstance().getKnowledgeRuntime());
     }
-    
+
     public void internalSetVariable(String name, Object value) {
         if (name.startsWith(VariableScope.CASE_FILE_PREFIX)) {
             String nameInCaseFile = name.replaceFirst(VariableScope.CASE_FILE_PREFIX, "");            
@@ -149,27 +265,45 @@ public class VariableScopeInstance extends AbstractContextInstance {
             
         }
         // not a case, store it in normal variables
-    	variables.put(name, value);
+        log.debug("internalSetVariable... name = #0, value = #1", name, value);
+
+        VariableValueWrapper oldVariable = null;
+        if (value != null && (!(value instanceof VariableValueWrapper) || !((VariableValueWrapper)value).isNull())) {
+            oldVariable = internalGetPersistentVariables().get(name);
+            if (oldVariable != null) {
+                oldVariable.setValue(value);
+            } else if (value instanceof VariableValueWrapper) {
+                internalGetPersistentVariables().put(name, (VariableValueWrapper) value);
+            } else {
+            	VariableService variableService = KnowledgeServiceLocator.getInstance(VariableService.class);
+            	VariableValueWrapper newProcessVariable = variableService.wrapVariable(value);
+                internalGetPersistentVariables().put(name, newProcessVariable);
+            }
+        } else {
+            internalGetPersistentVariables().put(name, null);
+        }
     }
-    
+
     public VariableScope getVariableScope() {
-    	return (VariableScope) getContext();
+        return (VariableScope) getContext();
     }
-    
+
+    @Override
     public void setContextInstanceContainer(ContextInstanceContainer contextInstanceContainer) {
-    	super.setContextInstanceContainer(contextInstanceContainer);
-    	for (Variable variable : getVariableScope().getVariables()) {
+        super.setContextInstanceContainer(contextInstanceContainer);
+        for (Variable variable : getVariableScope().getVariables()) {
             if (variable.getValue() != null) {
                 setVariable(variable.getName(), variable.getValue());
             }
         }
-    	if (contextInstanceContainer instanceof CompositeContextNodeInstance) {
-    		this.variableIdPrefix = ((Node) ((CompositeContextNodeInstance) contextInstanceContainer).getNode()).getUniqueId();
-    		this.variableInstanceIdPrefix = ((CompositeContextNodeInstance) contextInstanceContainer).getUniqueId();
-    	}
-	}
+        if (contextInstanceContainer instanceof CompositeContextNodeInstance) {
+            this.variableIdPrefix = ((Node) ((CompositeContextNodeInstance) contextInstanceContainer).getNode()).getUniqueId();
+            this.variableInstanceIdPrefix = ((CompositeContextNodeInstance) contextInstanceContainer).getUniqueId();
+        }
+    }
     
     public void enforceRequiredVariables() {
+        Map<String, VariableValueWrapper> variables = getPersistentVariables();
         VariableScope variableScope = getVariableScope();
         for (Variable variable : variableScope.getVariables()) {
             String name = variable.getName();
