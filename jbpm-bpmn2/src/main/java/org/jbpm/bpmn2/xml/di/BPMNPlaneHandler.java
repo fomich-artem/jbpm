@@ -17,6 +17,7 @@
 package org.jbpm.bpmn2.xml.di;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 
@@ -24,6 +25,8 @@ import org.drools.core.xml.BaseAbstractHandler;
 import org.drools.core.xml.ExtensibleXmlParser;
 import org.drools.core.xml.Handler;
 import org.jbpm.bpmn2.core.Definitions;
+import org.jbpm.bpmn2.core.Lane;
+import org.jbpm.bpmn2.xml.LaneHandler;
 import org.jbpm.bpmn2.xml.di.BPMNEdgeHandler.ConnectionInfo;
 import org.jbpm.bpmn2.xml.di.BPMNShapeHandler.NodeInfo;
 import org.jbpm.compiler.xml.ProcessBuildData;
@@ -78,8 +81,12 @@ public class BPMNPlaneHandler extends BaseAbstractHandler implements Handler {
             }
         }
         if (process != null) {
-	        for (NodeInfo nodeInfo: processInfo.getNodeInfos()) {
+	        @SuppressWarnings("unchecked")
+			List<Lane> lanes = (List<Lane>) process.getMetaData(LaneHandler.LANES);
+	        if (lanes == null) lanes = Collections.emptyList();
+        	for (NodeInfo nodeInfo: processInfo.getNodeInfos()) {
 	        	processNodeInfo(nodeInfo, process.getNodes());
+	        	processNodeInfoForLanes(nodeInfo, lanes);
 	        }
 	        postProcessNodeOffset(process.getNodes(), 0, 0);
 	        for (ConnectionInfo connectionInfo: processInfo.getConnectionInfos()) {
@@ -113,7 +120,20 @@ public class BPMNPlaneHandler extends BaseAbstractHandler implements Handler {
         }
         return false;
     }
-    
+
+    private void processNodeInfoForLanes(NodeInfo nodeInfo, List<Lane> lanes) {
+        for (Lane lane: lanes) {
+            String id = lane.getId();
+            if (nodeInfo.getNodeRef().equals(id)) {
+                lane.setMetaData("x", nodeInfo.getX());
+                lane.setMetaData("y", nodeInfo.getY());
+                lane.setMetaData("width", nodeInfo.getWidth());
+                lane.setMetaData("height", nodeInfo.getHeight());
+            	return;
+            }
+        }
+    }
+
     private void postProcessNodeOffset(Node[] nodes, int xOffset, int yOffset) {
     	for (Node node: nodes) {
     		Integer x = (Integer) node.getMetaData().get("x");
