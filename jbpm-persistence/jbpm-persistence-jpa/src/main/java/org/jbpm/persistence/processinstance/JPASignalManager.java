@@ -19,6 +19,10 @@ package org.jbpm.persistence.processinstance;
 import java.util.List;
 
 import org.drools.core.common.InternalKnowledgeRuntime;
+import org.jboss.seam.contexts.Contexts;
+import org.jboss.seam.contexts.Lifecycle;
+import org.jboss.seam.log.Log;
+import org.jboss.seam.log.Logging;
 import org.jbpm.persistence.api.ProcessPersistenceContext;
 import org.jbpm.persistence.api.ProcessPersistenceContextManager;
 import org.jbpm.process.core.async.AsyncSignalEventCommand;
@@ -33,6 +37,8 @@ import org.slf4j.LoggerFactory;
 public class JPASignalManager extends DefaultSignalManager {
     private static final String ASYNC_SIGNAL_PREFIX = "ASYNC-";
     private static final Logger logger = LoggerFactory.getLogger(JPASignalManager.class);
+
+    Log log = Logging.getLog(getClass());
 
     public JPASignalManager(InternalKnowledgeRuntime kruntime) {
         super(kruntime);
@@ -68,8 +74,16 @@ public class JPASignalManager extends DefaultSignalManager {
         }
         
         
+        boolean appContextActive = Contexts.isApplicationContextActive();
+        if (!appContextActive) Lifecycle.beginCall();
+        try {
+            log.debug("signalEvent... type = #0, event data = #1, thread = #2", type, event, Thread.currentThread());
+
+
+        log.debug("processInstancesToSignalList: #0", processInstancesToSignalList);
         for ( long id : processInstancesToSignalList ) {
             try {
+            	log.debug("read process instance with id: #0", id);
                 getKnowledgeRuntime().getProcessInstance( id );
             } catch (IllegalStateException e) {
                 // IllegalStateException can be thrown when using RuntimeManager
@@ -81,6 +95,20 @@ public class JPASignalManager extends DefaultSignalManager {
         }
         super.signalEvent( actualSignalType,
                            event );
+        //getKnowledgeRuntime().executeQueuedActions();
+        } finally {
+            if (!appContextActive) Lifecycle.endCall();
+        }
+    }
+
+    public void signalEvent(long processInstanceId, String type, Object event) {
+        boolean appContextActive = Contexts.isApplicationContextActive();
+        if (!appContextActive) Lifecycle.beginCall();
+        try {
+            super.signalEvent(processInstanceId, type, event);
+        } finally {
+            if (!appContextActive) Lifecycle.endCall();
+        }
     }
 
 }
