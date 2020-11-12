@@ -250,8 +250,13 @@ public abstract class AbstractNodeHandler extends BaseAbstractHandler implements
 
     public static DroolsAction extractScript(Element xmlNode) {
     	String dialect = "mvel";
-    	if ("http://www.java.com/java".equals(xmlNode.getAttribute("scriptFormat"))) {
+    	String scriptFormat = xmlNode.getAttribute("scriptFormat");
+		if ("http://www.java.com/java".equals(scriptFormat)) {
     		dialect = "java";
+    	} else if ("http://groovy.codehaus.org/groovy".equals(scriptFormat)) {
+    		dialect = "groovy";
+    	} else if ("http://comsoft.org/seamel".equals(scriptFormat)) {
+    		dialect = "seamel";
     	} else if ("http://www.javascript.com/javascript".equals(xmlNode.getAttribute("scriptFormat"))) {
             dialect = "JavaScript";
         }
