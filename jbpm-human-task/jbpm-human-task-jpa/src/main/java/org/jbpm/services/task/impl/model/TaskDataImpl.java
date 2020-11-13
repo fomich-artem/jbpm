@@ -103,6 +103,10 @@ public class TaskDataImpl implements InternalTaskData {
     
     private long processSessionId;
 
+    private String processKey;
+
+    private String processInstanceIdsPath;
+
     @OneToMany(cascade = CascadeType.ALL, targetEntity=CommentImpl.class)
     @JoinColumn(name = "TaskData_Comments_Id", nullable = true)
     @OrderBy("id ASC")
@@ -204,6 +208,13 @@ public class TaskDataImpl implements InternalTaskData {
             out.writeBoolean(false);
         }
 
+        if (processInstanceIdsPath != null) {
+            out.writeBoolean(true);
+            out.writeUTF(processInstanceIdsPath);
+        } else {
+            out.writeBoolean(false);
+        }
+
         if (documentAccessType != null) {
             out.writeBoolean(true);
             out.writeObject(documentAccessType);
@@ -287,6 +298,13 @@ public class TaskDataImpl implements InternalTaskData {
         } else {
             out.writeBoolean(false);
         }
+
+        if (processKey != null) {
+            out.writeBoolean(true);
+            out.writeUTF(processKey);
+        } else {
+            out.writeBoolean(false);
+        }
         
         if (processSessionId != -1) {
             out.writeBoolean(true);
@@ -344,6 +362,10 @@ public class TaskDataImpl implements InternalTaskData {
         }
 
         if (in.readBoolean()) {
+            processInstanceIdsPath = in.readUTF();
+        }
+
+        if (in.readBoolean()) {
             documentAccessType = (AccessType) in.readObject();
         }
 
@@ -389,6 +411,10 @@ public class TaskDataImpl implements InternalTaskData {
         
         if (in.readBoolean()) {
             processId = in.readUTF();
+        }
+        
+        if (in.readBoolean()) {
+            processKey = in.readUTF();
         }
         
         if (in.readBoolean()) {
@@ -823,6 +849,26 @@ public class TaskDataImpl implements InternalTaskData {
     @Override
     public void setDeploymentId(String deploymentId) {
         this.deploymentId = deploymentId;
+    }
+
+    @Override
+    public String getProcessKey() {
+        return processKey;
+    }
+
+    @Override
+    public String getProcessInstanceIdsPath() {
+        return processInstanceIdsPath;
+    }
+
+    @Override
+    public void setProcessKey(String processKey) {
+        this.processKey = processKey;
+    }
+
+    @Override
+    public void setProcessInstanceIdsPath(String processInstanceIdsPath) {
+        this.processInstanceIdsPath = processInstanceIdsPath;
     }
     
     static UserImpl convertToUserImpl(User user) { 

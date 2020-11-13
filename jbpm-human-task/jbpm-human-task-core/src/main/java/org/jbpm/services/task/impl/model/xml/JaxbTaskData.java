@@ -142,6 +142,14 @@ public class JaxbTaskData extends AbstractJaxbTaskObject<TaskData> implements Ta
     @XmlSchemaType(name = "string")
     private String deploymentId;
 
+    @XmlElement(name = "process-key")
+    @XmlSchemaType(name = "String")
+    private String processKey;
+
+    @XmlElement(name = "process-instance-ids-path")
+    @XmlSchemaType(name = "String")
+    private String processInstanceIdsPath;
+
     public JaxbTaskData() {
         super(TaskData.class);
     }
@@ -186,6 +194,8 @@ public class JaxbTaskData extends AbstractJaxbTaskObject<TaskData> implements Ta
         this.parentId = taskData.getParentId();
         this.processId = taskData.getProcessId();
         this.processSessionId = taskData.getProcessSessionId();
+        this.processKey = taskData.getProcessKey();
+        this.processInstanceIdsPath = taskData.getProcessInstanceIdsPath();
         if( taskData.getComments() != null ) { 
             List<JaxbComment> commentList = new ArrayList<JaxbComment>();
             for (Object comment : taskData.getComments() ) {
@@ -360,6 +370,16 @@ public class JaxbTaskData extends AbstractJaxbTaskObject<TaskData> implements Ta
         this.faultName = faultName;
     }
 
+    @Override
+    public String getProcessKey() {
+        return processKey;
+    }
+
+    @Override
+    public String getProcessInstanceIdsPath() {
+        return processInstanceIdsPath;
+    }
+
     public AccessType getFaultAccessType() {
         return faultAccessType;
     }
@@ -456,6 +476,14 @@ public class JaxbTaskData extends AbstractJaxbTaskObject<TaskData> implements Ta
     @Override
     public Map<String, Object> getTaskOutputVariables() {
         return new HashMap<String, Object>();
+    }
+    
+    public void setProcessKey(String processKey) {
+        this.processKey = processKey;
+    }
+    
+    public void setProcessInstanceIdsPath(String processInstanceIdsPath) {
+        this.processInstanceIdsPath = processInstanceIdsPath;
     }
 
 }
