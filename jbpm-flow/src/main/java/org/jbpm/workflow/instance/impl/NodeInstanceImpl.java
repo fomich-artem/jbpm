@@ -24,9 +24,12 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 
 import org.drools.core.common.InternalKnowledgeRuntime;
 import org.drools.core.spi.ProcessContext;
+import org.jboss.seam.log.Log;
+import org.jboss.seam.log.Logging;
 import org.jbpm.process.core.Context;
 import org.jbpm.process.core.ContextContainer;
 import org.jbpm.process.core.context.exception.ExceptionScope;
@@ -42,6 +45,7 @@ import org.jbpm.process.instance.context.variable.VariableScopeInstance;
 import org.jbpm.process.instance.impl.Action;
 import org.jbpm.process.instance.impl.ConstraintEvaluator;
 import org.jbpm.process.instance.impl.NoOpExecutionErrorHandler;
+import org.jbpm.process.instance.impl.ProcessInstanceImpl;
 import org.jbpm.workflow.core.impl.NodeImpl;
 import org.jbpm.workflow.instance.WorkflowProcessInstance;
 import org.jbpm.workflow.instance.WorkflowRuntimeException;
@@ -50,6 +54,7 @@ import org.jbpm.workflow.instance.node.CompositeNodeInstance;
 import org.kie.api.definition.process.Connection;
 import org.kie.api.definition.process.Node;
 import org.kie.api.runtime.EnvironmentName;
+import org.kie.api.openicar.variable.VariableValueWrapper;
 import org.kie.api.runtime.process.NodeInstance;
 import org.kie.api.runtime.process.NodeInstanceContainer;
 import org.kie.internal.runtime.error.ExecutionErrorHandler;
@@ -71,6 +76,8 @@ public abstract class NodeInstanceImpl implements org.jbpm.workflow.instance.Nod
 
 	private static final long serialVersionUID = 510l;
 	protected static final Logger logger = LoggerFactory.getLogger(NodeInstanceImpl.class);
+
+    Log log = Logging.getLog(getClass());
 	
 	private long id = -1;
     private long nodeId;
@@ -201,20 +208,40 @@ public abstract class NodeInstanceImpl implements org.jbpm.workflow.instance.Nod
     		((InternalProcessRuntime) kruntime.getProcessRuntime())
     			.getProcessEventSupport().fireBeforeNodeTriggered(this, kruntime);
     	}
+        Map<String, String> persistentVariableStrings = getPersistentVariableStrings();
         try {
             getExecutionErrorHandler().processing(this);
             internalTrigger(from, type);
         }
-        catch (WorkflowRuntimeException e) {
-            throw e;
-        }
         catch (Exception e) {
+            log.error("trigger failed... variables in process context: #0", e, persistentVariableStrings);
+            if (e instanceof WorkflowRuntimeException)
+                throw (WorkflowRuntimeException) e;
             throw new WorkflowRuntimeException(this, getProcessInstance(), e);
         }
         if (!hidden) {
         	((InternalProcessRuntime) kruntime.getProcessRuntime())
         		.getProcessEventSupport().fireAfterNodeTriggered(this, kruntime);
         }
+    }
+    
+    protected Map<String, String> getPersistentVariableStrings() {
+        Map<String, String> persistentVariableStringValues = new HashMap<String, String>();
+        try {
+            ProcessInstanceImpl processInstanceImpl = ((ProcessInstanceImpl)processInstance);
+            VariableScopeInstance variableScopeInstance = (VariableScopeInstance) processInstanceImpl.getContextInstance(VariableScope.VARIABLE_SCOPE);
+            Map<String, VariableValueWrapper> persistentVariables = variableScopeInstance.getPersistentVariables();
+            for (Map.Entry<String, VariableValueWrapper> persProcVarEntry : persistentVariables.entrySet()) {
+                String varName = persProcVarEntry.getKey();
+                VariableValueWrapper variable = persProcVarEntry.getValue();
+                String varValue = Objects.toString(variable == null ? null : variable.getPrimitiveValue());
+                persistentVariableStringValues.put(varName, varValue);
+            }
+        } catch (Exception e1) {
+            e1.printStackTrace();
+            persistentVariableStringValues.put("_failure_", Objects.toString(e1));
+        }
+        return persistentVariableStringValues;
     }
     
     public abstract void internalTrigger(NodeInstance from, String type);
