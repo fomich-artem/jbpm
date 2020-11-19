@@ -23,6 +23,7 @@ import org.jbpm.process.builder.dialect.feel.FeelProcessDialect;
 import org.jbpm.process.builder.dialect.java.JavaProcessDialect;
 import org.jbpm.process.builder.dialect.javascript.JavaScriptProcessDialect;
 import org.jbpm.process.builder.dialect.mvel.MVELProcessDialect;
+import org.jbpm.process.builder.dialect.seamel.SeamELProcessDialect;
 
 public class ProcessDialectRegistry {
 
@@ -34,6 +35,7 @@ public class ProcessDialectRegistry {
         dialects.put("mvel", new MVELProcessDialect());
         dialects.put("JavaScript", new JavaScriptProcessDialect());
         dialects.put("FEEL", new FeelProcessDialect());
+        dialects.put(SeamELProcessDialect.ID, new SeamELProcessDialect());
     }
 
     public static ProcessDialect getDialect(String dialect) {
