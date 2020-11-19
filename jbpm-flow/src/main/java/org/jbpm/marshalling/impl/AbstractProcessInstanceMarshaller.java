@@ -453,6 +453,14 @@ public abstract class AbstractProcessInstanceMarshaller implements
 
     protected abstract WorkflowProcessInstanceImpl createProcessInstance();
 
+    protected <T extends NodeInstance> T createNodeInstance(Class<T> nodeClass) throws IOException {
+        try {
+            return nodeClass.newInstance();
+        } catch (InstantiationException | IllegalAccessException e) {
+            throw new IOException(e);
+        }
+    }
+
     public NodeInstance readNodeInstance(MarshallerReaderContext context,
             NodeInstanceContainer nodeInstanceContainer,
             WorkflowProcessInstance processInstance) throws IOException {
@@ -524,7 +532,7 @@ public abstract class AbstractProcessInstanceMarshaller implements
         NodeInstanceImpl nodeInstance = null;
         switch (nodeType) {
             case PersisterEnums.RULE_SET_NODE_INSTANCE:
-                nodeInstance = new RuleSetNodeInstance();
+                nodeInstance = createNodeInstance(RuleSetNodeInstance.class);
                 int nbTimerInstances = context.readInt();
                 if (nbTimerInstances > 0) {
                     List<Long> timerInstances = new ArrayList<Long>();
@@ -535,7 +543,7 @@ public abstract class AbstractProcessInstanceMarshaller implements
                 }
                 break;
             case PersisterEnums.HUMAN_TASK_NODE_INSTANCE:
-                nodeInstance = new HumanTaskNodeInstance();
+                nodeInstance = createNodeInstance(HumanTaskNodeInstance.class);
                 ((HumanTaskNodeInstance) nodeInstance).internalSetWorkItemId(context.readLong());
                 nbTimerInstances = context.readInt();
                 if (nbTimerInstances > 0) {
@@ -547,7 +555,7 @@ public abstract class AbstractProcessInstanceMarshaller implements
                 }
                 break;
             case PersisterEnums.WORK_ITEM_NODE_INSTANCE:
-                nodeInstance = new WorkItemNodeInstance();
+                nodeInstance = createNodeInstance(WorkItemNodeInstance.class);
                 ((WorkItemNodeInstance) nodeInstance).internalSetWorkItemId(context.readLong());
                 nbTimerInstances = context.readInt();
                 if (nbTimerInstances > 0) {
@@ -559,7 +567,7 @@ public abstract class AbstractProcessInstanceMarshaller implements
                 }
                 break;
             case PersisterEnums.SUB_PROCESS_NODE_INSTANCE:
-                nodeInstance = new SubProcessNodeInstance();
+                nodeInstance = createNodeInstance(SubProcessNodeInstance.class);
                 ((SubProcessNodeInstance) nodeInstance).internalSetProcessInstanceId(context.readLong());
                 nbTimerInstances = context.readInt();
                 if (nbTimerInstances > 0) {
@@ -571,7 +579,7 @@ public abstract class AbstractProcessInstanceMarshaller implements
                 }
                 break;
             case PersisterEnums.MILESTONE_NODE_INSTANCE:
-                nodeInstance = new MilestoneNodeInstance();
+                nodeInstance = createNodeInstance(MilestoneNodeInstance.class);
                 nbTimerInstances = context.readInt();
                 if (nbTimerInstances > 0) {
                     List<Long> timerInstances = new ArrayList<Long>();
@@ -582,14 +590,14 @@ public abstract class AbstractProcessInstanceMarshaller implements
                 }
                 break;
             case PersisterEnums.TIMER_NODE_INSTANCE:
-                nodeInstance = new TimerNodeInstance();
+                nodeInstance = createNodeInstance(TimerNodeInstance.class);
                 ((TimerNodeInstance) nodeInstance).internalSetTimerId(context.readLong());
                 break;
             case PersisterEnums.EVENT_NODE_INSTANCE:
-                nodeInstance = new EventNodeInstance();
+                nodeInstance = createNodeInstance(EventNodeInstance.class);
                 break;
             case PersisterEnums.JOIN_NODE_INSTANCE:
-                nodeInstance = new JoinInstance();
+                nodeInstance = createNodeInstance(JoinInstance.class);
                 int number = context.readInt();
                 if (number > 0) {
                     Map<Long, Integer> triggers = new HashMap<Long, Integer>();
@@ -603,7 +611,7 @@ public abstract class AbstractProcessInstanceMarshaller implements
                 }
                 break;
             case PersisterEnums.COMPOSITE_NODE_INSTANCE:
-                nodeInstance = new CompositeContextNodeInstance();
+                nodeInstance = createNodeInstance(CompositeContextNodeInstance.class);
                 nbTimerInstances = context.readInt();
                 if (nbTimerInstances > 0) {
                     List<Long> timerInstances = new ArrayList<Long>();
@@ -614,10 +622,10 @@ public abstract class AbstractProcessInstanceMarshaller implements
                 }
                 break;
             case PersisterEnums.FOR_EACH_NODE_INSTANCE:
-                nodeInstance = new ForEachNodeInstance();
+                nodeInstance = createNodeInstance(ForEachNodeInstance.class);
                 break;
             case PersisterEnums.DYNAMIC_NODE_INSTANCE:
-                nodeInstance = new DynamicNodeInstance();
+                nodeInstance = createNodeInstance(DynamicNodeInstance.class);
                 nbTimerInstances = context.readInt();
                 if (nbTimerInstances > 0) {
                     List<Long> timerInstances = new ArrayList<Long>();
@@ -628,7 +636,7 @@ public abstract class AbstractProcessInstanceMarshaller implements
                 }
                 break;
             case PersisterEnums.STATE_NODE_INSTANCE:
-                nodeInstance = new StateNodeInstance();
+                nodeInstance = createNodeInstance(StateNodeInstance.class);
                 nbTimerInstances = context.readInt();
                 if (nbTimerInstances > 0) {
                     List<Long> timerInstances = new ArrayList<Long>();
