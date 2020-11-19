@@ -29,6 +29,7 @@ import java.util.Map;
 
 import org.drools.core.common.InternalWorkingMemory;
 import org.drools.core.impl.InternalKnowledgeBase;
+import org.kie.api.openicar.variable.VariableValueWrapper;
 import org.drools.core.marshalling.impl.MarshallerReaderContext;
 import org.drools.core.marshalling.impl.MarshallerWriteContext;
 import org.drools.core.marshalling.impl.PersisterEnums;
@@ -111,9 +112,9 @@ public abstract class AbstractProcessInstanceMarshaller implements
         	}
         }
         VariableScopeInstance variableScopeInstance = (VariableScopeInstance) workFlow.getContextInstance(VariableScope.VARIABLE_SCOPE);
-        Map<String, Object> variables = variableScopeInstance.getVariables();
+        Map<String, VariableValueWrapper> variables = variableScopeInstance.getPersistentVariables();
         List<String> keys = new ArrayList<String>(variables.keySet());
-        Collection<Object> values = variables.values();
+        Collection<VariableValueWrapper> values = variables.values();
         
         Collections.sort(keys,
                 new Comparator<String>() {
@@ -151,7 +152,20 @@ public abstract class AbstractProcessInstanceMarshaller implements
                 strategy.write((ObjectOutputStream) context, object);
             }
             
-        }    
+        }
+
+        /* begin comsoft block */
+        // process instance metadata
+        Map<String, Object> metaData = workFlow.getMetaData();
+        // New marshalling algorithm when using strategies
+        int useNewMarshallingStrategyAlgorithm = -2;
+        context.writeInt(useNewMarshallingStrategyAlgorithm);
+        // Choose first strategy that accepts the object (what was always done)
+        ObjectMarshallingStrategy strategy = context.getObjectMarshallingStrategyStore().getStrategyObject(metaData);
+        context.writeUTF(strategy.getClass().getName());
+        strategy.write((ObjectOutputStream) context, metaData);
+        /* end comsoft block */
+
         return null;
 
     }
@@ -281,11 +295,13 @@ public abstract class AbstractProcessInstanceMarshaller implements
             } else {
                 stream.writeInt(0);
             }
+
+            /* begin comsoft block */
             VariableScopeInstance variableScopeInstance = (VariableScopeInstance) compositeNodeInstance.getContextInstance(VariableScope.VARIABLE_SCOPE);
             if (variableScopeInstance == null) {
             	stream.writeInt(0);
             } else {
-	            Map<String, Object> variables = variableScopeInstance.getVariables();
+                Map<String, VariableValueWrapper> variables = variableScopeInstance.getPersistentVariables();
 	            List<String> keys = new ArrayList<String>(variables.keySet());
 	            Collections.sort(keys,
 	                    new Comparator<String>() {
@@ -300,6 +316,8 @@ public abstract class AbstractProcessInstanceMarshaller implements
 	                stream.writeObject(variables.get(key));
 	            }
             }
+            /* end comsoft block */
+
             List<NodeInstance> nodeInstances = new ArrayList<NodeInstance>(compositeNodeInstance.getNodeInstances());
             Collections.sort(nodeInstances,
                     new Comparator<NodeInstance>() {
@@ -364,9 +382,10 @@ public abstract class AbstractProcessInstanceMarshaller implements
         String processId = context.readUTF();
         processInstance.setProcessId(processId);
         Process process = kBase.getProcess(processId);
-        if (kBase != null) {
+        //if (kBase != null) { stupid check
+            if (process == null) throw new IOException("Knowledge base does not contains process: " + processId);
             processInstance.setProcess(process);
-        }
+		//}
         processInstance.setState(context.readInt());
         long nodeInstanceCounter = context.readLong();
         processInstance.setKnowledgeRuntime(wm.getKnowledgeRuntime());
@@ -444,6 +463,21 @@ public abstract class AbstractProcessInstanceMarshaller implements
 				}
 			}
 		}
+
+        // process instance metadata
+        if (context.available() > 0) {
+            ObjectMarshallingStrategy strategy = readStrategy(context);
+            if (strategy != null) {
+                Map<String, Object> metaData;
+                try {
+                    metaData = (Map<String, Object>) strategy.read((ObjectInputStream) context);
+                } catch (ClassNotFoundException e) {
+                    throw new IllegalArgumentException("Could not reload process instance metaData");
+                }
+                if (metaData != null) processInstance.getMetaData().putAll(metaData);
+            }
+        }
+
         processInstance.internalSetNodeInstanceCounter(nodeInstanceCounter);
         if (wm != null) {
             processInstance.reconnect();
@@ -459,6 +493,27 @@ public abstract class AbstractProcessInstanceMarshaller implements
         } catch (InstantiationException | IllegalAccessException e) {
             throw new IOException(e);
         }
+    }
+
+    protected ObjectMarshallingStrategy readStrategy(MarshallerReaderContext context) throws IOException {
+        ObjectInputStream stream = (ObjectInputStream) context;
+        ObjectMarshallingStrategy strategy = null;
+        int index = stream.readInt();
+        // This is the old way of de/serializing strategy objects
+        if ( index >= 0 ) {
+            strategy = context.getResolverStrategyFactory().getStrategy( index );
+        }
+        // This is the new way
+        else if( index == -2 ) {
+            String strategyClassName = stream.readUTF();
+            if ( ! StringUtils.isEmpty(strategyClassName) ) {
+                strategy = context.getResolverStrategyFactory().getStrategyObject(strategyClassName);
+                if( strategy == null ) {
+                    throw new IllegalStateException( "No strategy of type " + strategyClassName + " available." );
+                }
+            }
+        }
+        return strategy;
     }
 
     public NodeInstance readNodeInstance(MarshallerReaderContext context,
