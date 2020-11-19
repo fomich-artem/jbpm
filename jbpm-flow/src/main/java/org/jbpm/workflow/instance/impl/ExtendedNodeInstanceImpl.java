@@ -21,8 +21,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
 
+import javax.script.ScriptContext;
+import javax.script.SimpleScriptContext;
+
 import org.drools.core.spi.ProcessContext;
 import org.drools.mvel.MVELSafeHelper;
+import org.jbpm.openicar.seamel.SeamELScriptEngine;
+import org.jbpm.openicar.seamel.SeamELVariableBindings;
 import org.jbpm.process.core.context.variable.Variable;
 import org.jbpm.process.core.context.variable.VariableScope;
 import org.jbpm.process.core.datatype.DataType;
@@ -35,6 +40,7 @@ import org.jbpm.workflow.core.impl.ExtendedNodeImpl;
 import org.jbpm.workflow.core.node.Assignment;
 import org.jbpm.workflow.core.node.DataAssociation;
 import org.jbpm.workflow.core.node.Transformation;
+import org.kie.api.openicar.profiler.SimpleProfiler;
 import org.kie.api.runtime.process.DataTransformer;
 import org.kie.api.runtime.process.NodeInstance;
 
@@ -76,6 +82,8 @@ public abstract class ExtendedNodeInstanceImpl extends NodeInstanceImpl {
         this.mapOutputSetVariables(nodeInstance, dataOututAssoctiation, ouputData, (target, value) -> {});
     }
     protected void mapOutputSetVariables(NodeInstance nodeInstance, List<DataAssociation> dataOututAssoctiation, Map<String, Object> ouputData, BiConsumer<String, Object> parameterSet) {
+        SimpleProfiler.st(" - assign output parameters");
+        SimpleScriptContext scriptContext = null;
         for (Iterator<DataAssociation> iterator = dataOututAssoctiation.iterator(); iterator.hasNext();) {
             DataAssociation association = iterator.next();
             if (association.getTransformation() != null) {
@@ -101,13 +109,33 @@ public abstract class ExtendedNodeInstanceImpl extends NodeInstanceImpl {
             } else if (association.getAssignments() == null || association.getAssignments().isEmpty()) {
                 VariableScopeInstance variableScopeInstance = (VariableScopeInstance) resolveContextInstance(VariableScope.VARIABLE_SCOPE, association.getTarget());
                 if (variableScopeInstance != null) {
-                    Object value = ouputData.get(association.getSources().get(0));
+                    String expression = association.getSources().get(0);
+                    Object value = ouputData.get(expression);
                     if (value == null) {
                         try {
-                            value = MVELSafeHelper.getEvaluator().eval(association.getSources().get(0), new MapResolverFactory(ouputData));
-                        } catch (Throwable t) {
-                            // do nothing
+                            if (expression.contains("#{")) {
+                                // evaluate expression thru Seam EL
+                                if (scriptContext == null) {
+                                    scriptContext = new SimpleScriptContext();
+                                    scriptContext.setBindings(new SeamELVariableBindings(new MapResolverFactory(ouputData)), ScriptContext.ENGINE_SCOPE);
+                                }
+                                value = SeamELScriptEngine.instance().eval(expression, scriptContext);
+                            } else {
+                                try {
+                                    value = MVELSafeHelper.getEvaluator().eval(expression, new MapResolverFactory(ouputData));
+                                } catch (Throwable t) {
+                                    // ничего не делаем, т.к. если значение переменной = null, то MVEL говорит, что нет такой функции/метода и т.п.
+                                }
+                            }
+                            log.debug("resolved outgoing association source [#0] value = #1", expression, value);
+                        } catch (Exception e1) {
+                            SimpleProfiler.en(" - assign output parameters");
+                            e1.printStackTrace();
+                            if (e1 instanceof RuntimeException) throw (RuntimeException)e1;
+                            throw new IllegalStateException(e1);
                         }
+                    } else {
+                        log.debug("variable [#0] value [#1] resolved from variable scope", expression, value);
                     }
                     Variable varDef = variableScopeInstance.getVariableScope().findVariable(association.getTarget());
                     DataType dataType = varDef.getType();
@@ -118,11 +146,17 @@ public abstract class ExtendedNodeInstanceImpl extends NodeInstanceImpl {
                     } else {
                         variableScopeInstance.getVariableScope().validateVariable(getProcessInstance().getProcessName(), association.getTarget(), value);
                     }
+                    log.debug("set variable [#0] value [#1]", association.getTarget(), value);
                     variableScopeInstance.setVariable(association.getTarget(), value);
                 } else {
+                    /*
                     logger.warn("Could not find variable scope for variable {}", association.getTarget());
                     logger.warn("when trying to complete Work Item {}",nodeInstance.getNodeName());
                     logger.warn("Continuing without setting variable.");
+                     */
+                    SimpleProfiler.en(" - assign output parameters");
+                    log.error("Could not find variable scope for variable [#0] when trying to complete Work Item [#1]", association.getTarget(), nodeInstance.getNodeName());
+                    throw new IllegalStateException("Could not find variable scope for variable [" + association.getTarget() + "] when trying to complete Work Item [" + nodeInstance.getNodeName() + "]");
                 }
 
             } else {
@@ -131,10 +165,13 @@ public abstract class ExtendedNodeInstanceImpl extends NodeInstanceImpl {
                         handleAssignment(it.next());
                     }
                 } catch (Exception e) {
+                    SimpleProfiler.en(" - assign output parameters");
+                    e.printStackTrace();
                     throw new RuntimeException(e);
                 }
             }
         }
+        SimpleProfiler.en(" - assign output parameters");
     }
     
     protected void handleAssignment(Assignment assignment) {

@@ -23,8 +23,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import javax.script.ScriptContext;
+import javax.script.SimpleScriptContext;
+
 import org.drools.mvel.MVELSafeHelper;
+import org.kie.api.openicar.profiler.SimpleProfiler;
 import org.jbpm.process.core.ContextContainer;
+import org.jboss.seam.log.Log;
+import org.jboss.seam.log.Logging;
+import org.jbpm.openicar.seamel.SeamELScriptEngine;
+import org.jbpm.openicar.seamel.SeamELVariableBindings;
 import org.jbpm.process.core.context.variable.VariableScope;
 import org.jbpm.process.instance.ContextInstance;
 import org.jbpm.process.instance.context.variable.VariableScopeInstance;
@@ -48,7 +56,9 @@ public class ForEachNodeInstance extends CompositeContextNodeInstance {
     private static final long serialVersionUID = 510L;
 
     private static final String TEMP_OUTPUT_VAR = "foreach_output";
-    
+
+    protected transient Log log = Logging.getLog(getClass());
+
     private int sequentialCounter = 0;
 
     public ForEachNode getForEachNode() {
@@ -102,8 +112,17 @@ public class ForEachNodeInstance extends CompositeContextNodeInstance {
             collection = variableScopeInstance.getVariable(collectionExpression);
         } else {
             try {
-                collection = MVELSafeHelper.getEvaluator().eval(collectionExpression, new NodeInstanceResolverFactory(this));
+                if (collectionExpression.contains("#{")) {
+                    // evaluate expression thru Seam EL
+                    SimpleScriptContext scriptContext = new SimpleScriptContext();
+                    scriptContext.setBindings(new SeamELVariableBindings(new NodeInstanceResolverFactory(this)), ScriptContext.ENGINE_SCOPE);
+                    collection = SeamELScriptEngine.instance().eval(collectionExpression, scriptContext);
+                } else {
+                    collection = MVELSafeHelper.getEvaluator().eval(collectionExpression, new NodeInstanceResolverFactory(this));
+                }
+                log.debug("resolved collection expression [#0] value = #1", collectionExpression, collection);
             } catch (Throwable t) {
+                log.error("Could not resolve collection expression [#0]", collectionExpression);
                 throw new IllegalArgumentException(
                         "Could not find collection " + collectionExpression);
             }
@@ -134,11 +153,16 @@ public class ForEachNodeInstance extends CompositeContextNodeInstance {
         @Override
         public void internalTrigger(org.kie.api.runtime.process.NodeInstance fromm, String type) {
             String collectionExpression = getForEachNode().getCollectionExpression();
+			SimpleProfiler.st(" - evaluateCollectionExpression");
             Collection<?> collection = evaluateCollectionExpression(collectionExpression);
+			SimpleProfiler.en(" - evaluateCollectionExpression");
             ((NodeInstanceContainer) getNodeInstanceContainer()).removeNodeInstance(this);
             if (collection.isEmpty()) {
+				SimpleProfiler.st(" - triggerCompleted no wait 1");
                 ForEachNodeInstance.this.triggerCompleted(org.jbpm.workflow.core.Node.CONNECTION_DEFAULT_TYPE, true);
+				SimpleProfiler.en(" - triggerCompleted no wait 1");
             } else {
+				SimpleProfiler.st(" - creaate child node instances");
             	List<NodeInstance> nodeInstances = new ArrayList<>();
             	
             	for (Object o: collection) {
@@ -157,12 +181,17 @@ public class ForEachNodeInstance extends CompositeContextNodeInstance {
             		    break;
             		}
             	}
+				SimpleProfiler.en(" - creaate child node instances");
+				SimpleProfiler.st(" - trigger child node instances");
             	for (NodeInstance nodeInstance: nodeInstances) {
             	    logger.debug( "Triggering [{}] in multi-instance loop.", nodeInstance.getNodeId() );
             		nodeInstance.trigger(this, getForEachSplitNode().getTo().getToType());
             	}
+				SimpleProfiler.en(" - trigger child node instances");
 	            if (!getForEachNode().isWaitForCompletion()) {
+					SimpleProfiler.st(" - triggerCompleted no wait 2");
 	            	ForEachNodeInstance.this.triggerCompleted(org.jbpm.workflow.core.Node.CONNECTION_DEFAULT_TYPE, false);
+					SimpleProfiler.en(" - triggerCompleted no wait 2");
 	            }
             }
         }
@@ -179,6 +208,8 @@ public class ForEachNodeInstance extends CompositeContextNodeInstance {
         @Override
         @SuppressWarnings({"unchecked", "rawtypes"})
         public void internalTrigger(org.kie.api.runtime.process.NodeInstance from, String type) {
+            if (log.isDebugEnabled())
+			    log.debug("internalTrigger [#0] from [#1] node instances : [#2]", type, from, getNodeInstanceContainer().getNodeInstances());
         	Map<String, Object> tempVariables = new HashMap<>();
             VariableScopeInstance subprocessVariableScopeInstance = null;
             if (getForEachNode().getOutputVariableName() != null) {
@@ -261,7 +292,15 @@ public class ForEachNodeInstance extends CompositeContextNodeInstance {
                 return false;
             }
             try {
-                Object result = MVELSafeHelper.getEvaluator().eval(expression, new ForEachNodeInstanceResolverFactory(this, tempVariables));
+                Object result;
+                if (expression.contains("#{")) {
+                    // evaluate expression thru Seam EL
+                    SimpleScriptContext scriptContext = new SimpleScriptContext();
+                    scriptContext.setBindings(new SeamELVariableBindings(new ForEachNodeInstanceResolverFactory(this, tempVariables)), ScriptContext.ENGINE_SCOPE);
+                    result = SeamELScriptEngine.instance().eval(expression, scriptContext);
+                } else {
+                    result = MVELSafeHelper.getEvaluator().eval(expression, new ForEachNodeInstanceResolverFactory(this, tempVariables));
+                }
                 if (!(result instanceof Boolean)) {
                     throw new RuntimeException("Completion condition expression must return boolean values: " + result
                                                        + " for expression " + expression);

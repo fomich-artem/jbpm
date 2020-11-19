@@ -17,6 +17,7 @@
 package org.jbpm.bpmn2.xml;
 
 import org.drools.core.xml.DefaultSemanticModule;
+import org.jbpm.bpmn2.core.TextAnnotation;
 import org.jbpm.workflow.core.node.ActionNode;
 import org.jbpm.workflow.core.node.CatchLinkNode;
 import org.jbpm.workflow.core.node.CompositeContextNode;
@@ -97,6 +98,15 @@ public class BPMNSemanticModule extends DefaultSemanticModule {
         handlersByClass.put(ThrowLinkNode.class, new ThrowLinkNodeHandler());
         handlersByClass.put(CatchLinkNode.class, new CatchLinkNodeHandler());
 
+        // begin comsoft block
+        //addHandler("documentation", new DocumentationHandler()); -- duplicates original jBPM code
+        addHandler("textAnnotation", new TextAnnotationHandler());
+        getHandler("association").getValidPeers().add(TextAnnotation.class);
+        getHandler("lane").getValidPeers().add(TextAnnotation.class);
+        getHandler("sequenceFlow").getValidPeers().add(TextAnnotation.class);
+        getHandler("property").getValidPeers().add(TextAnnotation.class);
+        getHandler("dataObject").getValidPeers().add(TextAnnotation.class);
+        // end comsoft block
 	}
 
 }

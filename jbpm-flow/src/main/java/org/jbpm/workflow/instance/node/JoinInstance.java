@@ -26,12 +26,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.jbpm.process.core.context.variable.VariableScope;
-import org.jbpm.process.instance.context.variable.VariableScopeInstance;
+import javax.script.ScriptContext;
+import javax.script.SimpleScriptContext;
+
+import org.jboss.seam.log.Log;
+import org.jboss.seam.log.Logging;
+import org.jbpm.openicar.seamel.SeamELScriptEngine;
+import org.jbpm.openicar.seamel.SeamELVariableBindings;
 import org.jbpm.workflow.core.node.AsyncEventNode;
 import org.jbpm.workflow.core.node.Join;
 import org.jbpm.workflow.core.node.Split;
 import org.jbpm.workflow.instance.impl.NodeInstanceImpl;
+import org.jbpm.workflow.instance.impl.NodeInstanceResolverFactory;
 import org.kie.api.definition.process.Connection;
 import org.kie.api.definition.process.Node;
 import org.kie.api.runtime.process.NodeInstance;
@@ -45,6 +51,8 @@ public class JoinInstance extends NodeInstanceImpl {
 
     private static final long serialVersionUID = 510l;
     
+    protected transient Log log = Logging.getLog(getClass());
+
     private Map<Long, Integer> triggers = new HashMap<Long, Integer>();
     
     protected Join getJoin() {
@@ -101,22 +109,24 @@ public class JoinInstance extends NodeInstanceImpl {
                         counter++;
                     }
                 }
-                String n = join.getN();
+                String n = join.getN().trim();
                 Integer number = null;
                 if (n.startsWith("#{") && n.endsWith("}")) {
-                	n = n.substring(2, n.length() - 1);
-                	VariableScopeInstance variableScopeInstance = (VariableScopeInstance)
-                		resolveContextInstance(VariableScope.VARIABLE_SCOPE, n);
-                	if (variableScopeInstance == null) {
-                		throw new IllegalArgumentException(
-            				"Could not find variable " + n + " when executing join.");
+                    String expression = n;
+                    Object value;
+                    try {
+                        ScriptContext scriptContext = new SimpleScriptContext();
+                        scriptContext.setBindings(new SeamELVariableBindings(new NodeInstanceResolverFactory(this)), ScriptContext.ENGINE_SCOPE);
+                        value = SeamELScriptEngine.instance().eval(expression, scriptContext);
+                        log.debug("resolved parameter expression [#0] value = #1", expression, value);
+                    } catch (Throwable t) {
+                        if (t instanceof RuntimeException) throw (RuntimeException)t;
+                        throw new IllegalStateException(t);
                 	}
-                	Object value = variableScopeInstance.getVariable(n);
                 	if (value instanceof Number) {
                 		number = ((Number) value).intValue();
                 	} else {
-                		throw new IllegalArgumentException(
-            				"Variable " + n + " did not return a number when executing join: " + value);
+                        throw new IllegalArgumentException("Expression " + n + " did not return a number when executing join: " + value);
                 	}
                 } else {
 	            	number = new Integer(n);

@@ -202,8 +202,17 @@ public class ProcessHandler extends BaseAbstractHandler implements Handler {
             process.getMetaData(LaneHandler.LANES);
         assignLanes(process, lanes);
         postProcessNodes(process, process);
+        setupDocumentation(parser, process);
 		return process;
 	}
+
+	protected void setupDocumentation(ExtensibleXmlParser parser, RuleFlowProcess process) {
+        // write doc if necessary
+        if (process.getMetaData("Documentation") == null) {
+            String text = (String) ((ProcessBuildData) parser.getData()).getMetaData("Documentation");
+            if (text != null) process.setMetaData("Documentation", text);
+        }
+    }
 	
 
     public static void linkIntermediateLinks(NodeContainer process,List<IntermediateLink> links) {

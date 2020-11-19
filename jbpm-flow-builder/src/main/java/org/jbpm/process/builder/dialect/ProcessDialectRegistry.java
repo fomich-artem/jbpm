@@ -28,6 +28,7 @@ import org.jbpm.process.builder.dialect.seamel.SeamELProcessDialect;
 public class ProcessDialectRegistry {
 
     private static ConcurrentMap<String, ProcessDialect> dialects;
+    private static ConcurrentMap<String, String> uriToName;
 
     static {
         dialects = new ConcurrentHashMap<String, ProcessDialect>();
@@ -36,6 +37,9 @@ public class ProcessDialectRegistry {
         dialects.put("JavaScript", new JavaScriptProcessDialect());
         dialects.put("FEEL", new FeelProcessDialect());
         dialects.put(SeamELProcessDialect.ID, new SeamELProcessDialect());
+
+        uriToName = new ConcurrentHashMap<String, String>();
+        uriToName.put(SeamELProcessDialect.SEAMEL_LANGUAGE, SeamELProcessDialect.ID);
     }
 
     public static ProcessDialect getDialect(String dialect) {
@@ -44,6 +48,19 @@ public class ProcessDialectRegistry {
 
     public static void setDialect(String dialectName, ProcessDialect dialect) {
         dialects.put(dialectName, dialect);
+    }
+
+    public static void setDialectUri(String uri, String dialectName, ProcessDialect dialect) {
+        dialects.put(dialectName, dialect);
+        uriToName.put(uri, dialectName);
+    }
+
+    public static boolean isSupportedUri(String uri) {
+        return uriToName.containsKey(uri);
+    }
+
+    public static String uriToName(String uri) {
+        return uriToName.get(uri);
     }
 
 }

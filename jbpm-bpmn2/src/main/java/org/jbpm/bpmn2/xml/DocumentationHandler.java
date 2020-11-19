@@ -17,10 +17,17 @@
 package org.jbpm.bpmn2.xml;
 
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 
 import org.drools.core.xml.BaseAbstractHandler;
 import org.drools.core.xml.ExtensibleXmlParser;
 import org.drools.core.xml.Handler;
+import org.jbpm.bpmn2.core.Definitions;
+import org.jbpm.bpmn2.core.Lane;
+import org.jbpm.bpmn2.core.TextAnnotation;
+import org.jbpm.compiler.xml.ProcessBuildData;
+import org.jbpm.ruleflow.core.RuleFlowProcess;
 import org.jbpm.workflow.core.impl.NodeImpl;
 import org.w3c.dom.Element;
 import org.w3c.dom.Text;
@@ -55,7 +62,12 @@ public class DocumentationHandler extends BaseAbstractHandler implements Handler
 			          final ExtensibleXmlParser parser) throws SAXException {
 		Element element = parser.endElementBuilder();
 		Object parent = parser.getParent();
-		if (parent instanceof NodeImpl) {
+        boolean isNode = parent instanceof NodeImpl;
+        boolean isProcess = parent instanceof RuleFlowProcess;
+        boolean isDefinitions = parent instanceof Definitions;
+        boolean isTextAnnotation = parent instanceof TextAnnotation;
+        boolean isLane = parent instanceof Lane;
+        if (isNode || isProcess || isDefinitions || isTextAnnotation || isLane) {
 	        String text = ((Text)element.getChildNodes().item( 0 )).getWholeText();
 	        if (text != null) {
 	            text = text.trim();
@@ -63,7 +75,27 @@ public class DocumentationHandler extends BaseAbstractHandler implements Handler
 	                text = null;
 	            }
 	        }
-	        ((NodeImpl) parent).getMetaData().put("Documentation", text);
+            if (text != null) {
+                if (isDefinitions) {
+                    ((ProcessBuildData) parser.getData()).setMetaData("Documentation", text);
+                    // пишем документацию, если это еще не сделано
+                    List<org.kie.api.definition.process.Process> processes = ((ProcessBuildData) parser.getData()).getProcesses();
+                    for (org.kie.api.definition.process.Process process : processes)
+                        if (((RuleFlowProcess) process).getMetaData("Documentation") == null)
+                            ((RuleFlowProcess) process).getMetaData().put("Documentation", text);
+                } else {
+                    Map<String, Object> metaData;
+                    if (isNode)
+                        metaData = ((NodeImpl) parent).getMetaData();
+                    else if (isTextAnnotation)
+                        metaData = ((TextAnnotation) parent).getMetaData();
+                    else  if (isLane)
+                        metaData = ((Lane) parent).getMetaData();
+                    else
+                        metaData = ((RuleFlowProcess) parent).getMetaData();
+                    metaData.put("Documentation", text);
+                }
+            }
 		}
 		return parser.getCurrent();
 	}

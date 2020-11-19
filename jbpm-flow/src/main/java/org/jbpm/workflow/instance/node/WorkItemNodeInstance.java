@@ -22,7 +22,9 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
+
+import javax.script.ScriptContext;
+import javax.script.SimpleScriptContext;
 
 import org.drools.core.WorkItemHandlerNotFoundException;
 import org.drools.core.process.instance.WorkItem;
@@ -34,6 +36,10 @@ import org.jbpm.process.core.Context;
 import org.jbpm.process.core.ContextContainer;
 import org.jbpm.process.core.Work;
 import org.jbpm.process.core.context.exception.ExceptionScope;
+import org.jboss.seam.log.Log;
+import org.jboss.seam.log.Logging;
+import org.jbpm.openicar.seamel.SeamELScriptEngine;
+import org.jbpm.openicar.seamel.SeamELVariableBindings;
 import org.jbpm.process.core.context.variable.Variable;
 import org.jbpm.process.core.context.variable.VariableScope;
 import org.jbpm.process.core.datatype.DataType;
@@ -62,6 +68,7 @@ import org.kie.api.runtime.EnvironmentName;
 import org.kie.api.runtime.KieRuntime;
 import org.kie.api.runtime.manager.RuntimeEngine;
 import org.kie.api.runtime.manager.RuntimeManager;
+import org.kie.api.openicar.profiler.SimpleProfiler;
 import org.kie.api.runtime.process.DataTransformer;
 import org.kie.api.runtime.process.EventListener;
 import org.kie.api.runtime.process.NodeInstance;
@@ -89,7 +96,9 @@ public class WorkItemNodeInstance extends StateBasedNodeInstance implements Even
 
     private long workItemId = -1;
     protected transient WorkItem workItem;
-    
+
+    protected transient Log log = Logging.getLog(getClass());
+
     private long exceptionHandlingProcessInstanceId = -1;
 
     private int triggerCount = 0;
@@ -202,6 +211,7 @@ public class WorkItemNodeInstance extends StateBasedNodeInstance implements Even
     }
 
     protected void setWorkItemParametersFromDataAssociations(WorkItemNode workItemNode) {
+        SimpleScriptContext scriptContext = null;
         for (Iterator<DataAssociation> iterator = workItemNode.getInAssociations().iterator(); iterator.hasNext();) {
             DataAssociation association = iterator.next();
             if (association.getTransformation() != null) {
@@ -215,19 +225,36 @@ public class WorkItemNodeInstance extends StateBasedNodeInstance implements Even
                 }
             } else if (association.getAssignments() == null || association.getAssignments().isEmpty()) {
                 Object parameterValue = null;
-                VariableScopeInstance variableScopeInstance = (VariableScopeInstance) resolveContextInstance(VariableScope.VARIABLE_SCOPE, association.getSources().get(0));
+                String expression = association.getSources().get(0);
+                VariableScopeInstance variableScopeInstance = (VariableScopeInstance) resolveContextInstance(VariableScope.VARIABLE_SCOPE, expression);
                 if (variableScopeInstance != null) {
-                    parameterValue = variableScopeInstance.getVariable(association.getSources().get(0));
+                    parameterValue = variableScopeInstance.getVariable(expression);
                 } else {
                     try {
-                        parameterValue = MVELSafeHelper.getEvaluator().eval(association.getSources().get(0), new NodeInstanceResolverFactory(this));
+                        if (expression.contains("#{")) {
+                            // evaluate expression thru Seam EL
+                            if (scriptContext == null) {
+                                scriptContext = new SimpleScriptContext();
+                                scriptContext.setBindings(new SeamELVariableBindings(new NodeInstanceResolverFactory(this)), ScriptContext.ENGINE_SCOPE);
+                            }
+                            parameterValue = SeamELScriptEngine.instance().eval(expression, scriptContext);
+                        } else {
+                            parameterValue = MVELSafeHelper.getEvaluator().eval(expression, new NodeInstanceResolverFactory(this));
+                        }
+                        log.debug("resolved incoming association source [#0] value = #1", expression, parameterValue);
                     } catch (Throwable t) {
+                        /*
                         logger.error("Could not find variable scope for variable {}", association.getSources().get(0));
                         logger.error("when trying to execute Work Item {}", workItemNode.getWork().getName());
                         logger.error("Continuing without setting parameter.");
+                         */
+                        log.error("Could not find variable scope for variable/expression [#0] when trying to execute Work Item [#1]", expression, workItemNode.getWork().getName());
+                        if (t instanceof RuntimeException) throw (RuntimeException)t;
+                        throw new IllegalStateException(t);
                     }
                 }
-                if (parameterValue != null) {
+                if ((parameterValue != null) || (variableScopeInstance != null)) {
+                    log.debug("set work item parameter [#0] value [#1] from incomming association [#2]", association.getTarget(), parameterValue, expression);
                     workItem.setParameter(association.getTarget(), parameterValue);
                 }
             } else {
@@ -240,38 +267,28 @@ public class WorkItemNodeInstance extends StateBasedNodeInstance implements Even
     }
 	
     protected void setWorkItemParametersFromStringReplacement(WorkItemNode workItemNode) {
+        SimpleScriptContext scriptContext = null;
         for (Map.Entry<String, Object> entry : workItem.getParameters().entrySet()) {
             if (entry.getValue() instanceof String) {
-                String s = (String) entry.getValue();
-                Map<String, String> replacements = new HashMap<String, String>();
-                Matcher matcher = PatternConstants.PARAMETER_MATCHER.matcher(s);
-                while (matcher.find()) {
-                    String paramName = matcher.group(1);
-                    if (replacements.get(paramName) == null) {
-                        VariableScopeInstance variableScopeInstance = (VariableScopeInstance) resolveContextInstance(VariableScope.VARIABLE_SCOPE, paramName);
-                        if (variableScopeInstance != null) {
-                            Object variableValue = variableScopeInstance.getVariable(paramName);
-                            String variableValueString = variableValue == null ? "" : variableValue.toString();
-                            replacements.put(paramName, variableValueString);
-                        } else {
-                            try {
-                                Object variableValue = MVELSafeHelper.getEvaluator().eval(paramName, new NodeInstanceResolverFactory(this));
-                                String variableValueString = variableValue == null ? "" : variableValue.toString();
-                                replacements.put(paramName, variableValueString);
-                            } catch (Throwable t) {
-                                logger.error("Could not find variable scope for variable {}", paramName);
-                                logger.error("when trying to replace variable in string for Work Item {}", workItemNode.getWork().getName());
-                                logger.error("Continuing without setting parameter.");
-                            }
+                String expression = (String) entry.getValue();
+                try {
+                    if (expression.contains("#{")) {
+                        // evaluate expression thru Seam EL
+                        if (scriptContext == null) {
+                            scriptContext = new SimpleScriptContext();
+                            scriptContext.setBindings(new SeamELVariableBindings(new NodeInstanceResolverFactory(this)), ScriptContext.ENGINE_SCOPE);
                         }
+                        Object value = SeamELScriptEngine.instance().eval(expression, scriptContext);
+                        String valueString = value == null ? "" : value.toString();
+                        log.debug("resolved parameter expression [#0] valueString = #1", expression, valueString);
+                        log.debug("set work item parameter [#0] value [#1]", entry.getKey(), valueString);
+                        ((WorkItem) workItem).setParameter(entry.getKey(), valueString);
                     }
+                } catch (Throwable t) {
+                    log.error("Could not find variable scope for variable/expression [#0] when trying to execute Work Item [#1]", expression, workItemNode.getWork().getName());
+                    if (t instanceof RuntimeException) throw (RuntimeException)t;
+                    throw new IllegalStateException(t);
                 }
-
-                for (Map.Entry<String, String> replacement : replacements.entrySet()) {
-                    s = s.replace("#{" + replacement.getKey() + "}", replacement.getValue());
-                }
-                workItem.setParameter(entry.getKey(), s);
-
             }
         }
     }
@@ -295,7 +312,15 @@ public class WorkItemNodeInstance extends StateBasedNodeInstance implements Even
             KieRuntime kruntime = ((ProcessInstance) getProcessInstance()).getKnowledgeRuntime();
             kruntime.update(kruntime.getFactHandle(this), this);
         } else {
+            String profilerTriggerCompleted = " - triggerCompleted() "; 
+            String processId = getProcessInstance().getProcessId();
+            String nodeName = getNodeName();
+            String profilerTriggerCompletedKeyFull = profilerTriggerCompleted + processId + "/" + nodeName;
+            SimpleProfiler.st(profilerTriggerCompleted);
+            SimpleProfiler.st(profilerTriggerCompletedKeyFull);
             triggerCompleted();
+            SimpleProfiler.en(profilerTriggerCompleted);
+            SimpleProfiler.en(profilerTriggerCompletedKeyFull);
         }
     }
 

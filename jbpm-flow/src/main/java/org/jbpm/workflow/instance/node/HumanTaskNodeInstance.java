@@ -65,7 +65,7 @@ public class HumanTaskNodeInstance extends WorkItemNodeInstance {
         return (String) workItem.getParameter("ActorId");
     }
     
-    private SwimlaneContextInstance getSwimlaneContextInstance(String swimlaneName) {
+    protected SwimlaneContextInstance getSwimlaneContextInstance(String swimlaneName) {
         if (this.swimlaneContextInstance == null) {
             if (swimlaneName == null) {
                 return null;
@@ -83,6 +83,11 @@ public class HumanTaskNodeInstance extends WorkItemNodeInstance {
     }
     
     public void triggerCompleted(WorkItem workItem) {
+        actualizeSwimlaneActor(workItem);
+        super.triggerCompleted(workItem);
+    }
+
+    protected void actualizeSwimlaneActor(WorkItem workItem) {
         String swimlaneName = getHumanTaskNode().getSwimlane();
         SwimlaneContextInstance swimlaneContextInstance = getSwimlaneContextInstance(swimlaneName);
         if (swimlaneContextInstance != null) {
@@ -91,6 +96,5 @@ public class HumanTaskNodeInstance extends WorkItemNodeInstance {
                 swimlaneContextInstance.setActorId(swimlaneName, newActorId);
             }
         }
-        super.triggerCompleted(workItem);
     }
 }

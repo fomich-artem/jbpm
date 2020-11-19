@@ -27,6 +27,7 @@ import org.jbpm.bpmn2.core.Association;
 import org.jbpm.bpmn2.core.IntermediateLink;
 import org.jbpm.bpmn2.core.Lane;
 import org.jbpm.bpmn2.core.SequenceFlow;
+import org.jbpm.process.builder.dialect.ProcessDialectRegistry;
 import org.jbpm.process.core.context.variable.Variable;
 import org.jbpm.ruleflow.core.RuleFlowProcess;
 import org.jbpm.workflow.core.Node;
@@ -139,6 +140,9 @@ public class SequenceFlowHandler extends BaseAbstractHandler implements Handler 
                         sequenceFlow.setLanguage("JavaScript");
                     } else if (XmlBPMNProcessDumper.FEEL_LANGUAGE.equals(language)) {
                         sequenceFlow.setLanguage("FEEL");
+                    } else if (ProcessDialectRegistry.isSupportedUri(language)) {
+                        // init sequenceFlow for known language (EL, Groovy, etc.),
+                        sequenceFlow.setLanguage(ProcessDialectRegistry.uriToName(language));
                     } else {
                         throw new IllegalArgumentException("Unknown language " + language);
                     }
