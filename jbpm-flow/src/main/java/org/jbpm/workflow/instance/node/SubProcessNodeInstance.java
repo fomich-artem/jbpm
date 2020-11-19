@@ -24,11 +24,17 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.regex.Matcher;
 
+import javax.script.ScriptContext;
+import javax.script.ScriptException;
+import javax.script.SimpleScriptContext;
+
 import org.drools.core.common.InternalKnowledgeRuntime;
 import org.drools.mvel.MVELSafeHelper;
 import org.jbpm.process.core.Context;
 import org.jbpm.process.core.ContextContainer;
 import org.jbpm.process.core.context.exception.ExceptionScope;
+import org.jbpm.openicar.seamel.SeamELScriptEngine;
+import org.jbpm.openicar.seamel.SeamELVariableBindings;
 import org.jbpm.process.core.context.variable.VariableScope;
 import org.jbpm.process.core.impl.DataTransformerRegistry;
 import org.jbpm.process.instance.ContextInstance;
@@ -53,6 +59,8 @@ import org.kie.api.definition.process.Node;
 import org.kie.api.definition.process.Process;
 import org.kie.api.runtime.EnvironmentName;
 import org.kie.api.runtime.KieRuntime;
+import org.kie.api.openicar.KnowledgeServiceLocator;
+import org.kie.api.openicar.profiler.SimpleProfiler;
 import org.kie.api.runtime.manager.RuntimeEngine;
 import org.kie.api.runtime.manager.RuntimeManager;
 import org.kie.api.runtime.process.DataTransformer;
@@ -64,6 +72,7 @@ import org.kie.internal.process.CorrelationKey;
 import org.kie.internal.process.CorrelationKeyFactory;
 import org.kie.internal.runtime.manager.SessionNotFoundException;
 import org.kie.internal.runtime.manager.context.CaseContext;
+import org.kie.internal.runtime.manager.SessionNotFoundException;
 import org.kie.internal.runtime.manager.context.ProcessInstanceIdContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -89,7 +98,15 @@ public class SubProcessNodeInstance extends StateBasedNodeInstance implements Ev
 
     @Override
     public void internalTrigger(final NodeInstance from, String type) {
+        String procId = getProcessInstance().getProcessId();
+
+        SimpleProfiler.st(" all");
+        SimpleProfiler.st(" all - " + procId);
+
+        SimpleProfiler.st(" invoke super.internalTrigger - " + procId);
     	super.internalTrigger(from, type);
+        SimpleProfiler.en(" invoke super.internalTrigger - " + procId);
+
     	// if node instance was cancelled, abort
 		if (getNodeInstanceContainer().getNodeInstance(getId()) == null) {
 			return;
@@ -98,6 +115,11 @@ public class SubProcessNodeInstance extends StateBasedNodeInstance implements Ev
             throw new IllegalArgumentException(
                 "A SubProcess node only accepts default incoming connections!");
         }
+
+        SimpleProfiler.st(" assign input parameters - " + procId);
+
+        SimpleScriptContext scriptContext = null;
+
         Map<String, Object> parameters = new HashMap<String, Object>();
         for (Iterator<DataAssociation> iterator =  getSubProcessNode().getInAssociations().iterator(); iterator.hasNext(); ) {
         	DataAssociation mapping = iterator.next();
@@ -116,13 +138,23 @@ public class SubProcessNodeInstance extends StateBasedNodeInstance implements Ev
 	            if (variableScopeInstance != null) {
 	                parameterValue = variableScopeInstance.getVariable(mapping.getSources().get(0));
 	            } else {
+	                String expression = mapping.getSources().get(0);
 	            	try {
-	            		parameterValue = MVELSafeHelper.getEvaluator().eval(mapping.getSources().get(0), new NodeInstanceResolverFactory(this));
+                        if (expression.contains("#{")) {
+                            // evaluate expression thru Seam EL
+                            if (scriptContext == null) {
+                                scriptContext = new SimpleScriptContext();
+                                scriptContext.setBindings(new SeamELVariableBindings(new NodeInstanceResolverFactory(this)), ScriptContext.ENGINE_SCOPE);
+                            }
+                            parameterValue = SeamELScriptEngine.instance().eval(expression, scriptContext);
+                        } else {
+                            parameterValue = MVELSafeHelper.getEvaluator().eval(expression, new NodeInstanceResolverFactory(this));
+                        }
 	            	} catch (Throwable t) {
-	            	    parameterValue = VariableUtil.resolveVariable(mapping.getSources().get(0), this);
-	                    if (parameterValue != null) {
-	                        parameters.put(mapping.getTarget(), parameterValue);
-	                    } else {
+	            	    parameterValue = VariableUtil.resolveVariable(expression, this);
+	                    if (parameterValue == null) {
+	                        //parameters.put(mapping.getTarget(), parameterValue);
+	                    //} else {
     	            	    logger.error("Could not find variable scope for variable {}", mapping.getSources().get(0));
     	            	    logger.error("when trying to execute SubProcess node {}", getSubProcessNode().getName());
     	            	    logger.error("Continuing without setting parameter.");
@@ -134,11 +166,31 @@ public class SubProcessNodeInstance extends StateBasedNodeInstance implements Ev
             	parameters.put(mapping.getTarget(),parameterValue);
             }
         }
+        SimpleProfiler.en(" assign input parameters - " + procId);
+        
         String processId = getSubProcessNode().getProcessId();
         if (processId == null) {
             // if process id is not given try with process name
             processId = getSubProcessNode().getProcessName();
         }
+
+        String expression = processId;
+        if (expression.contains("#{")) {
+            // evaluate expression thru Seam EL
+            if (scriptContext == null) {
+                scriptContext = new SimpleScriptContext();
+                scriptContext.setBindings(new SeamELVariableBindings(new NodeInstanceResolverFactory(this)), ScriptContext.ENGINE_SCOPE);
+            }
+            try {
+                processId = (String) SeamELScriptEngine.instance().eval(expression, scriptContext);
+            } catch (ScriptException e) {
+                logger.error("Could not find variable scope for variable/expression {}", expression);
+                logger.error("when trying to replace variable in processId for sub process {}", getNodeName());
+                logger.error("Continuing without setting process id.");
+            }
+        }
+
+        /*
         // resolve processId if necessary
         Map<String, String> replacements = new HashMap<String, String>();
 		Matcher matcher = PatternConstants.PARAMETER_MATCHER.matcher(processId);
@@ -167,7 +219,18 @@ public class SubProcessNodeInstance extends StateBasedNodeInstance implements Ev
         for (Map.Entry<String, String> replacement: replacements.entrySet()) {
         	processId = processId.replace("#{" + replacement.getKey() + "}", replacement.getValue());
         }
-        KieBase kbase = ((ProcessInstance) getProcessInstance()).getKnowledgeRuntime().getKieBase();
+         */
+
+        // get real process id
+        SimpleProfiler.st(" getLastProcessDefinitionVersionId - " + procId);
+        processId = KnowledgeServiceLocator.getInstance().getRealProcesId(processId);
+        SimpleProfiler.en(" getLastProcessDefinitionVersionId - " + procId);
+
+        SimpleProfiler.st(" get process definition - " + procId);
+        ProcessInstanceImpl mainProcessInstance = (ProcessInstanceImpl) getProcessInstance();
+        InternalKnowledgeRuntime knowledgeRuntime = mainProcessInstance.getKnowledgeRuntime();
+
+        KieBase kbase = knowledgeRuntime.getKieBase();
         // start process instance
         Process process = kbase.getProcess(processId);
 
@@ -181,12 +244,15 @@ public class SubProcessNodeInstance extends StateBasedNodeInstance implements Ev
             }
         }
 
+        SimpleProfiler.en(" get process definition - " + procId);
         if (process == null) {
             logger.error("Could not find process {}", processId);
             logger.error("Aborting process");
-        	((ProcessInstance) getProcessInstance()).setState(ProcessInstance.STATE_ABORTED);
+            mainProcessInstance.setState(ProcessInstance.STATE_ABORTED);
         	throw new RuntimeException("Could not find process " + processId);
         } else {
+            SimpleProfiler.st(" prepare sub-process instance - " + procId);
+            SimpleProfiler.st(" createProcessInstance - " + procId);
             KieRuntime kruntime = ((ProcessInstance) getProcessInstance()).getKnowledgeRuntime();
             RuntimeManager manager = (RuntimeManager) kruntime.getEnvironment().get(EnvironmentName.RUNTIME_MANAGER);
             if (manager != null) {
@@ -219,13 +285,18 @@ public class SubProcessNodeInstance extends StateBasedNodeInstance implements Ev
             } else {
                 processInstance = ( ProcessInstance ) kruntime.createProcessInstance(processId, parameters);
             }
+            SimpleProfiler.en(" createProcessInstance - " + procId);
 	    	this.processInstanceId = processInstance.getId();
 	    	((ProcessInstanceImpl) processInstance).setMetaData("ParentProcessInstanceId", getProcessInstance().getId());
 	    	((ProcessInstanceImpl) processInstance).setMetaData("ParentNodeInstanceId", getUniqueId());
 	    	((ProcessInstanceImpl) processInstance).setMetaData("ParentNodeId", getSubProcessNode().getUniqueId());
 	    	((ProcessInstanceImpl) processInstance).setParentProcessInstanceId(getProcessInstance().getId());
 	    	((ProcessInstanceImpl) processInstance).setSignalCompletion(getSubProcessNode().isWaitForCompletion());
-
+            String mainProcessInstanceIdsPath = mainProcessInstance.getProcessInstanceIdsPath();
+            String subProcessInstanceIdsPathPrefix = mainProcessInstanceIdsPath != null ? mainProcessInstanceIdsPath + ProcessInstanceImpl.PROCESS_INSTANCE_IDS_PATH_SEPARATOR : "";
+            ((ProcessInstanceImpl) processInstance).setProcessInstanceIdsPath(subProcessInstanceIdsPathPrefix + processInstance.getId());
+            SimpleProfiler.en(" prepare sub-process instance - " + procId);
+            SimpleProfiler.st(" start sub-process instance - " + procId);
             try {
                 kruntime.startProcessInstance(processInstance.getId());
             } catch (Exception e) {
@@ -235,16 +306,27 @@ public class SubProcessNodeInstance extends StateBasedNodeInstance implements Ev
                 } else {
                     throw e;
                 }
+            } finally {
+	            SimpleProfiler.en(" start sub-process instance - " + procId);
             }
+
 	    	if (!getSubProcessNode().isWaitForCompletion()) {
+	    		SimpleProfiler.st(" triggerCompleted no wait 1 - " + procId);
 	    		triggerCompleted();
+	    		SimpleProfiler.en(" triggerCompleted no wait 1 - " + procId);
 	    	} else if (processInstance.getState() == ProcessInstance.STATE_COMPLETED
 	    	        || processInstance.getState() == ProcessInstance.STATE_ABORTED) {
+	    	    SimpleProfiler.st(" triggerCompleted no wait 2 - " + procId);
 	    	    processInstanceCompleted(processInstance);
+	    	    SimpleProfiler.en(" triggerCompleted no wait 2 - " + procId);
 	    	} else {
+                SimpleProfiler.st(" add process listener - " + procId);    
 	    		addProcessListener();
+                SimpleProfiler.en(" add process listener - " + procId);
 	    	}
         }
+        SimpleProfiler.en(" all");
+        SimpleProfiler.en(" all - " + procId);
     }
 
     @Override
@@ -353,6 +435,9 @@ public class SubProcessNodeInstance extends StateBasedNodeInstance implements Ev
     private void handleOutMappings(ProcessInstance processInstance) {
         VariableScopeInstance subProcessVariableScopeInstance = (VariableScopeInstance)
 	        processInstance.getContextInstance(VariableScope.VARIABLE_SCOPE);
+
+        SimpleScriptContext scriptContext = null;
+
         SubProcessNode subProcessNode = getSubProcessNode();
         if (subProcessNode != null) {
 		    for (Iterator<org.jbpm.workflow.core.node.DataAssociation> iterator= subProcessNode.getOutAssociations().iterator(); iterator.hasNext(); ) {
@@ -373,23 +458,33 @@ public class SubProcessNodeInstance extends StateBasedNodeInstance implements Ev
                         }
                 	}
                 } else {
-			        VariableScopeInstance variableScopeInstance = (VariableScopeInstance)
-			            resolveContextInstance(VariableScope.VARIABLE_SCOPE, mapping.getTarget());
-			        if (variableScopeInstance != null) {
-			        	Object value = subProcessVariableScopeInstance.getVariable(mapping.getSources().get(0));
-			        	if (value == null) {
-			        		try {
-			            		value = MVELSafeHelper.getEvaluator().eval(mapping.getSources().get(0), new VariableScopeResolverFactory(subProcessVariableScopeInstance));
-			            	} catch (Throwable t) {
-			            		// do nothing
-			            	}
-			        	}
-			            variableScopeInstance.setVariable(mapping.getTarget(), value);
-			        } else {
-			            logger.error("Could not find variable scope for variable {}", mapping.getTarget());
-			            logger.error("when trying to complete SubProcess node {}", getSubProcessNode().getName());
-			            logger.error("Continuing without setting variable.");
-			        }
+    	        	VariableScopeInstance variableScopeInstance = (VariableScopeInstance)
+    		            resolveContextInstance(VariableScope.VARIABLE_SCOPE, mapping.getTarget());
+    	        	if (variableScopeInstance != null) {
+    	                String expression = mapping.getSources().get(0);
+                    	Object value = subProcessVariableScopeInstance.getVariable(expression);
+    	        		if (value == null) {
+    		        		try {
+                            	if (expression.contains("#{")) {
+    	                            // evaluate expression thru Seam EL
+    	                            if (scriptContext == null) {
+    	                                scriptContext = new SimpleScriptContext();
+        	                            scriptContext.setBindings(new SeamELVariableBindings(new VariableScopeResolverFactory(subProcessVariableScopeInstance)), ScriptContext.ENGINE_SCOPE);
+    	                            }
+    	                            value = SeamELScriptEngine.instance().eval(expression, scriptContext);
+                            	} else {
+    	                            value = MVELSafeHelper.getEvaluator().eval(expression, new VariableScopeResolverFactory(subProcessVariableScopeInstance));
+                            	}
+    		            	} catch (Throwable t) {
+    		            		// do nothing
+    		            	}
+    		        	}
+    		            variableScopeInstance.setVariable(mapping.getTarget(), value);
+    		        } else {
+    		            logger.error("Could not find variable scope for variable {}", mapping.getTarget());
+    		            logger.error("when trying to complete SubProcess node {}", getSubProcessNode().getName());
+    		            logger.error("Continuing without setting variable.");
+    		        }
                 }
 		    }
         } else {
@@ -462,7 +557,8 @@ public class SubProcessNodeInstance extends StateBasedNodeInstance implements Ev
     }
 
     protected Map<String, Object> getSourceParameters(DataAssociation association) {
-    	Map<String, Object> parameters = new HashMap<String, Object>();
+        SimpleScriptContext scriptContext = null;
+        Map<String, Object> parameters = new HashMap<String, Object>();
     	for (String sourceParam : association.getSources()) {
 	    	Object parameterValue = null;
 	        VariableScopeInstance variableScopeInstance = (VariableScopeInstance)
@@ -470,8 +566,19 @@ public class SubProcessNodeInstance extends StateBasedNodeInstance implements Ev
 	        if (variableScopeInstance != null) {
 	            parameterValue = variableScopeInstance.getVariable(sourceParam);
 	        } else {
-	            try {
-	                parameterValue = MVELSafeHelper.getEvaluator().eval(sourceParam, new NodeInstanceResolverFactory(this));
+                try {
+
+	            if (sourceParam.contains("#{")) {
+                    // evaluate expression thru Seam EL
+                    if (scriptContext == null) {
+                        scriptContext = new SimpleScriptContext();
+                        scriptContext.setBindings(new SeamELVariableBindings(new NodeInstanceResolverFactory(this)), ScriptContext.ENGINE_SCOPE);
+                    }
+                    parameterValue = SeamELScriptEngine.instance().eval(sourceParam, scriptContext);
+                } else {
+                    parameterValue = MVELSafeHelper.getEvaluator().eval(sourceParam, new NodeInstanceResolverFactory(this));
+                }
+
 	            } catch (Throwable t) {
 	                logger.warn("Could not find variable scope for variable {}", sourceParam);
 	            }
