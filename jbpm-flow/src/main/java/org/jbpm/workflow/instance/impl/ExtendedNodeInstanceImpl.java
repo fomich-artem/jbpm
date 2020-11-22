@@ -137,6 +137,7 @@ public abstract class ExtendedNodeInstanceImpl extends NodeInstanceImpl {
                     } else {
                         log.debug("variable [#0] value [#1] resolved from variable scope", expression, value);
                     }
+                    /* it breaks openicar's logic
                     Variable varDef = variableScopeInstance.getVariableScope().findVariable(association.getTarget());
                     DataType dataType = varDef.getType();
                     // exclude java.lang.Object as it is considered unknown type
@@ -146,6 +147,7 @@ public abstract class ExtendedNodeInstanceImpl extends NodeInstanceImpl {
                     } else {
                         variableScopeInstance.getVariableScope().validateVariable(getProcessInstance().getProcessName(), association.getTarget(), value);
                     }
+                     */
                     log.debug("set variable [#0] value [#1]", association.getTarget(), value);
                     variableScopeInstance.setVariable(association.getTarget(), value);
                 } else {
