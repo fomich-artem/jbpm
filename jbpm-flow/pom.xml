@@ -85,6 +85,7 @@
             	org.jbpm.workflow.*,
             	org.jbpm.osgi.flow.core.*,
                 org.jbpm.util.*
+            	, org.jbpm.openicar.*
             </Export-Package>
             <Bundle-Activator>org.jbpm.osgi.flow.core.Activator</Bundle-Activator>
           </instructions>
