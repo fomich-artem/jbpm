@@ -1,9 +1,9 @@
 
 package org.jbpm.process.builder.dialect.seamel;
 
-import org.drools.compiler.DescrBuildError;
-import org.drools.compiler.ReturnValueDescr;
-import org.drools.rule.builder.PackageBuildContext;
+import org.drools.compiler.compiler.DescrBuildError;
+import org.drools.compiler.compiler.ReturnValueDescr;
+import org.drools.compiler.rule.builder.PackageBuildContext;
 import org.jbpm.process.builder.ReturnValueEvaluatorBuilder;
 import org.jbpm.process.core.ContextResolver;
 import org.jbpm.process.instance.impl.ReturnValueConstraintEvaluator;

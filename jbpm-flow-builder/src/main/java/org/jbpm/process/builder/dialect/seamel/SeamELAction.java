@@ -3,9 +3,9 @@ package org.jbpm.process.builder.dialect.seamel;
 
 import java.io.Serializable;
 
-import org.drools.runtime.process.ProcessContext;
 import org.jbpm.openicar.seamel.SeamELUtils;
 import org.jbpm.process.instance.impl.Action;
+import org.kie.api.runtime.process.ProcessContext;
 
 /**
  * Seam EL action

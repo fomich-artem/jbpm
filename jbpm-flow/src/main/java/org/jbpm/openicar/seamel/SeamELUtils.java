@@ -5,9 +5,9 @@ import javax.script.ScriptContext;
 import javax.script.ScriptException;
 import javax.script.SimpleScriptContext;
 
-import org.drools.runtime.process.ProcessContext;
 import org.jbpm.workflow.instance.NodeInstance;
 import org.jbpm.workflow.instance.impl.NodeInstanceResolverFactory;
+import org.kie.api.runtime.process.ProcessContext;
 
 /**
  * Seam EL utilities
