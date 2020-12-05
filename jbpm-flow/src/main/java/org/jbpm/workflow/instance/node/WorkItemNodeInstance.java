@@ -30,6 +30,7 @@ import org.drools.core.WorkItemHandlerNotFoundException;
 import org.drools.core.process.instance.WorkItem;
 import org.drools.core.process.instance.WorkItemManager;
 import org.drools.core.process.instance.impl.WorkItemImpl;
+import org.drools.core.process.instance.impl.WorkItemSetIdHandler;
 import org.drools.core.spi.ProcessContext;
 import org.drools.mvel.MVELSafeHelper;
 import org.jbpm.process.core.Context;
@@ -152,12 +153,21 @@ public class WorkItemNodeInstance extends StateBasedNodeInstance implements Even
         workItem.setNodeInstanceId(this.getId());
         workItem.setNodeId(getNodeId());
 
+        ((WorkItemImpl) workItem).setWorkItemSetIdHandler(new WorkItemSetIdHandler() {
+            @Override
+            public void handleWorkItemSetId(long id) {
+                WorkItemNodeInstance.this.workItemId = id;
+            }
+        });
+
+
         processWorkItemHandler(() -> workItemManager.internalExecuteWorkItem((org.drools.core.process.instance.WorkItem) workItem));
 
         if (!workItemNode.isWaitForCompletion()) {
             triggerCompleted();
         }
         this.workItemId = workItem.getId();
+        ((WorkItemImpl) workItem).setWorkItemSetIdHandler(null);
     }
 
     private void processWorkItemHandler(Runnable handler) {
