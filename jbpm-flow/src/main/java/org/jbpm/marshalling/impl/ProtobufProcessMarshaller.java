@@ -380,6 +380,10 @@ public class ProtobufProcessMarshaller
                                            ( ObjectInputStream ) context,
                                            _variable.getValue().toByteArray(), 
                                            (context.getKnowledgeBase() == null)?null:context.getKnowledgeBase().getRootClassLoader() );
+
+        if (value instanceof VariableValueWrapper)
+            value = ((VariableValueWrapper) value).getValue();
+
         return value;
     }
     
