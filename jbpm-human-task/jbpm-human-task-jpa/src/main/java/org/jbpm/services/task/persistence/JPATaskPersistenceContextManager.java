@@ -58,5 +58,9 @@ public class JPATaskPersistenceContextManager extends
         super.endCommandScopedEntityManager();
     }
     
+    @Override
+    protected String getCmdScopedEntityManagerTxResourceKey() {
+        return EnvironmentName.CMD_SCOPED_ENTITY_MANAGER + "-task"; // different key for task persistence !!!
+    }
 
 }
