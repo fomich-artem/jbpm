@@ -502,10 +502,10 @@ public class JPAProcessInstanceManager
                 processInstanceInfo.updateLastReadDate();
                 TransactionManagerHelper.addToUpdatableSet(txm, processInstanceInfo);            
             }
+            SimpleProfiler.en(" restore ProcessInstance from db"); // profiler !!!
             if (((ProcessInstanceImpl) processInstance).getProcessXml() == null) {
     	        Process process = kruntime.getKieBase().getProcess( processInstance.getProcessId() );
     	        if ( process == null ) {
-                    SimpleProfiler.en(" restore ProcessInstance from db"); // profiler !!!
                     if (!readOnly)
                 	    unlockProcessInstance(id);
     	            throw new IllegalArgumentException( "Could not find process " + processInstance.getProcessId() );
@@ -524,7 +524,6 @@ public class JPAProcessInstanceManager
                     internalRemoveProcessInstance(processInstance);
                 }
             }
-            SimpleProfiler.en(" restore ProcessInstance from db"); // profiler !!!
             return processInstance;
         } finally {
             if (!readOnly && processInstance != null) {
