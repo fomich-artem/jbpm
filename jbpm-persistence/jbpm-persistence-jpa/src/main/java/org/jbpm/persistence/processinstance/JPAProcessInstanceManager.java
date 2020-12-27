@@ -140,6 +140,9 @@ public class JPAProcessInstanceManager
     	if (idsToLock.isEmpty()) {
     		return;
     	}
+    	if (tlpil.containsAll(idsToLock)) {
+    	    return;
+    	}
     	boolean success = false;
     	processInstancePreLocks.addAll(idsToLock);	// заявляем о том, что собираемся блокировать такие-то экземпляры процессов
     												// это необходимо для своевременной чистки мусора (блокировок)
@@ -319,7 +322,7 @@ public class JPAProcessInstanceManager
 
             String processInstanceIdsPath = context.getProcessInstanceIdsPath(processInstanceId);
         	if (processInstanceIdsPath == null)
-        		return Collections.emptyList();
+        	    return Collections.singletonList(processInstanceId); //Collections.emptyList();
 
         	String[] ids = processInstanceIdsPath.split(Pattern.quote(ProcessInstanceImpl.PROCESS_INSTANCE_IDS_PATH_SEPARATOR));
         	idsToLock = new ArrayList<Long>(ids.length);
