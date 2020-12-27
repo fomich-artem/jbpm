@@ -247,6 +247,8 @@
               org.kie.internal.runtime.manager,
               org.kie.internal.runtime.manager.context,
               org.slf4j
+              ,org.jboss.seam.*,
+              org.kie.api.openicar.*
             </Import-Package>
             <Export-Package>
               org.jbpm.persistence,
