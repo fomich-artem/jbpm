@@ -18,6 +18,7 @@ package org.jbpm.process.instance.timer;
 
 import java.io.Serializable;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.Map;
@@ -213,7 +214,7 @@ public class TimerManager {
         // timerService.removeJob( timer.getJobHandle() );
         // }
         if (timerService instanceof RegisteredTimerServiceDelegate) {
-            timers.clear();
+            //timers.clear();
             return;
         }
         /*
