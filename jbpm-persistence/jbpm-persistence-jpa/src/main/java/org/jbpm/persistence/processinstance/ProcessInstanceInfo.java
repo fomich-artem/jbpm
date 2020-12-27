@@ -46,10 +46,10 @@ import org.drools.serialization.protobuf.PersisterHelper;
 import org.drools.serialization.protobuf.ProtobufMarshaller;
 import org.drools.serialization.protobuf.ProtobufMarshallerReaderContext;
 import org.drools.serialization.protobuf.ProtobufProcessMarshallerWriteContext;
+import org.jbpm.marshalling.impl.AbstractProtobufProcessInstanceMarshaller;
 import org.jbpm.marshalling.impl.JBPMMessages;
 import org.jbpm.marshalling.impl.ProcessInstanceMarshaller;
 import org.jbpm.marshalling.impl.ProcessMarshallerRegistry;
-import org.jbpm.marshalling.impl.ProtobufRuleFlowProcessInstanceMarshaller;
 import org.jbpm.persistence.api.PersistentProcessInstance;
 import org.jbpm.process.instance.impl.ProcessInstanceImpl;
 import org.jbpm.workflow.instance.impl.WorkflowProcessInstanceImpl;
@@ -249,7 +249,7 @@ public class ProcessInstanceInfo implements PersistentProcessInstance {
             
             Object result = marshaller.writeProcessInstance( context,
                                                              processInstance);
-            if( marshaller instanceof ProtobufRuleFlowProcessInstanceMarshaller && result != null ) {
+            if( marshaller instanceof AbstractProtobufProcessInstanceMarshaller && result != null ) {
                 JBPMMessages.ProcessInstance _instance = (JBPMMessages.ProcessInstance)result;
                 PersisterHelper.writeToStreamWithHeader( context, 
                                                          _instance );
