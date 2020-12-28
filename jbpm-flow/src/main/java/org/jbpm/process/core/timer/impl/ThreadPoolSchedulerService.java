@@ -49,6 +49,7 @@ public class ThreadPoolSchedulerService implements GlobalSchedulerService {
     
     private static final Logger logger = LoggerFactory.getLogger(ThreadPoolSchedulerService.class);
     
+    private static final boolean FAILED_JOB_RETRIES_INFINITE = Boolean.valueOf(System.getProperty("org.jbpm.timer.thread.retries.infinite", "true"));
     private static final Integer FAILED_JOB_RETRIES = Integer.parseInt(System.getProperty("org.jbpm.timer.thread.retries", "5"));
     private static final Integer FAILED_JOB_DELAY = Integer.parseInt(System.getProperty("org.jbpm.timer.thread.delay", "1000"));
     
@@ -235,7 +236,7 @@ public class ThreadPoolSchedulerService implements GlobalSchedulerService {
                 return null;
             } catch (Exception e) {
                 GlobalJDKJobHandle jobHandle = (GlobalJDKJobHandle) ((TimerJobInstance)this.delegate).getJobHandle();
-                if (retries < FAILED_JOB_RETRIES) {                                                       
+                if (FAILED_JOB_RETRIES_INFINITE || retries < FAILED_JOB_RETRIES) {                                                       
                     ScheduledFuture<Void> future = this.scheduler.schedule( this,
                                                      FAILED_JOB_DELAY,
                                                      TimeUnit.MILLISECONDS );
