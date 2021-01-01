@@ -54,8 +54,8 @@ public class ThreadPoolSchedulerService implements GlobalSchedulerService {
     private static final Integer FAILED_JOB_DELAY = Integer.parseInt(System.getProperty("org.jbpm.timer.thread.delay", "1000"));
     
     private AtomicLong idCounter = new AtomicLong();
-    private ScheduledThreadPoolExecutor scheduler;
-    private TimerService globalTimerService;
+    protected ScheduledThreadPoolExecutor scheduler;
+    protected TimerService globalTimerService;
     private SchedulerServiceInterceptor interceptor = new DelegateSchedulerServiceInterceptor(this);
     
     private int poolSize;
@@ -218,7 +218,7 @@ public class ThreadPoolSchedulerService implements GlobalSchedulerService {
 		return true;
 	}
 	
-	private static class RetriggerCallable implements Callable<Void> {
+	protected static class RetriggerCallable implements Callable<Void> {
 
 	    private Callable<Void> delegate;
 	    private ScheduledThreadPoolExecutor scheduler;
@@ -248,6 +248,9 @@ public class ThreadPoolSchedulerService implements GlobalSchedulerService {
                 throw e;
             }
         }
-	    
+        
+        public Callable<Void> getDelegate() {
+            return delegate;
+        }
 	}
 }
