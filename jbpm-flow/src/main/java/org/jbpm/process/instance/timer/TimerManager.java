@@ -425,6 +425,7 @@ public class TimerManager {
         private static final long serialVersionUID = 476843895176221627L;
 
         private Long processInstanceId;
+        private Long rootProcessInstanceId;
         private transient InternalKnowledgeRuntime kruntime;
         private TimerInstance timer;
         private Trigger trigger;
@@ -442,8 +443,9 @@ public class TimerManager {
             this.kruntime = kruntime;
             this.sessionId = timer.getSessionId();
             this.newTimer = true;
+            setupRootProcessInstanceId();
         }
-        
+
         public ProcessJobContext(final TimerInstance timer, final Trigger trigger, final Long processInstanceId,
                 final InternalKnowledgeRuntime kruntime, boolean newTimer) {
             this.timer = timer;
@@ -452,10 +454,15 @@ public class TimerManager {
             this.kruntime = kruntime;
             this.sessionId = timer.getSessionId();
             this.newTimer = newTimer;
+            setupRootProcessInstanceId();
         }
 
         public Long getProcessInstanceId() {
             return processInstanceId;
+        }
+
+        public Long getRootProcessInstanceId() {
+            return rootProcessInstanceId;
         }
 
         public InternalKnowledgeRuntime getKnowledgeRuntime() {
@@ -493,6 +500,13 @@ public class TimerManager {
         
         public boolean isNewTimer() {
             return newTimer;
+        }
+
+        protected void setupRootProcessInstanceId() {
+            if (processInstanceId != null) {
+                org.kie.api.runtime.process.ProcessInstance processInstance = kruntime.getProcessInstance(processInstanceId, true);
+                rootProcessInstanceId = KnowledgeServiceLocator.getInstance().getRootProcessInstanceId(processInstance);
+            }
         }
     }
 
