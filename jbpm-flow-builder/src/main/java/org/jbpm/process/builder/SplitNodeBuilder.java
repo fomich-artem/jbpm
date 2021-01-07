@@ -55,9 +55,16 @@ public class SplitNodeBuilder implements ProcessNodeBuilder {
             ConstraintImpl constraint = (ConstraintImpl) entry.getValue();
             Connection outgoingConnection = null;
             for (Connection out: splitNode.getDefaultOutgoingConnections()) {
+                if (connection.getConnectionId() != null) { // for xor-same-target
+                    if (connection.getConnectionId().equals(out.getMetaData().get("UniqueId"))) {
+                        outgoingConnection = out;
+                        break;
+                    }
+                } else
                 if (out.getToType().equals(connection.getToType())
                     && out.getTo().getId() == connection.getNodeId()) {
                     outgoingConnection = out;
+                    break;
                 }
             }
             if (outgoingConnection == null) {
