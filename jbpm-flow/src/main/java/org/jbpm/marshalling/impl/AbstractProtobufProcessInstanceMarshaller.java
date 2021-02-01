@@ -170,7 +170,7 @@ public abstract class AbstractProtobufProcessInstanceMarshaller
             }
         }
 
-        // process instance metadata
+        // process instance metadata (very bad idea!!!)
         List<Map.Entry<String, Object>> metaData = new ArrayList<Map.Entry<String,Object>>(workFlow.getMetaData().entrySet());
         Collections.sort(metaData, new Comparator<Map.Entry<String, Object>>() {
             @Override
@@ -179,6 +179,8 @@ public abstract class AbstractProtobufProcessInstanceMarshaller
             }
         });
         for ( Map.Entry<String, Object> metaDataEntry : metaData ) {
+            if (!METADATA_ACCEPT_KEYS.contains(metaDataEntry.getKey()))
+                continue;
             if ( metaDataEntry.getValue() != null ) {
                 _instance.addMetadata( ProtobufProcessMarshaller.marshallStringToObjectMapEntry( context, metaDataEntry ) );
             }
@@ -608,9 +610,11 @@ public abstract class AbstractProtobufProcessInstanceMarshaller
             }
         }
         
-        // process instance metadata
+        // process instance metadata (very bad idea!!!)
         if (_instance.getMetadataCount() > 0) {
             for ( JBPMMessages.StringToObjectMapEntry _metadata : _instance.getMetadataList() ) {
+                if (!METADATA_ACCEPT_KEYS.contains(_metadata.getKey()))
+                    continue;
                 try {
                     Map.Entry<String, Object> _mapEntry = ProtobufProcessMarshaller.unmarshallStringToObjectMapEntry( context, _metadata );
                     processInstance.getMetaData().put(_mapEntry.getKey(), _mapEntry.getValue());

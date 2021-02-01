@@ -155,8 +155,12 @@ public abstract class AbstractProcessInstanceMarshaller implements
         }
 
         /* begin comsoft block */
-        // process instance metadata
-        Map<String, Object> metaData = workFlow.getMetaData();
+        // process instance metadata (very bad idea!!!)
+        Map<String, Object> metaData = new HashMap<>(); // using filtered by METADATA_ACCEPT_KEYS metadata
+        for (Map.Entry<String, Object> metaDataEntry : workFlow.getMetaData().entrySet()) {
+            if (METADATA_ACCEPT_KEYS.contains(metaDataEntry.getKey()))
+                metaData.put(metaDataEntry.getKey(), metaDataEntry.getValue());
+        }
         // New marshalling algorithm when using strategies
         int useNewMarshallingStrategyAlgorithm = -2;
         context.writeInt(useNewMarshallingStrategyAlgorithm);
@@ -464,7 +468,7 @@ public abstract class AbstractProcessInstanceMarshaller implements
 			}
 		}
 
-        // process instance metadata
+        // process instance metadata (very bad idea!!!)
         if (context.available() > 0) {
             ObjectMarshallingStrategy strategy = readStrategy(context);
             if (strategy != null) {

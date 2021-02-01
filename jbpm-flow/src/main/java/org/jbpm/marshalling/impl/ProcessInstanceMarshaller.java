@@ -17,10 +17,13 @@
 package org.jbpm.marshalling.impl;
 
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
 
 import org.drools.core.marshalling.impl.InputMarshaller;
 import org.drools.core.marshalling.impl.MarshallerReaderContext;
 import org.drools.core.marshalling.impl.MarshallerWriteContext;
+import org.jbpm.process.instance.impl.ProcessInstanceImpl;
 import org.kie.api.runtime.process.NodeInstance;
 import org.kie.api.runtime.process.NodeInstanceContainer;
 import org.kie.api.runtime.process.ProcessInstance;
@@ -39,6 +42,11 @@ import org.kie.api.runtime.process.WorkflowProcessInstance;
  */
 
 public interface ProcessInstanceMarshaller {
+
+    static List<String> METADATA_ACCEPT_KEYS = Arrays.asList(
+            ProcessInstanceImpl.PARENT_PROCESS_INSTANCE_ID_METADATA,
+            ProcessInstanceImpl.PROCESS_INSTANCE_IDS_PATH_METADATA
+    );
 
 	public Object writeProcessInstance(MarshallerWriteContext context,
 	                                   ProcessInstance processInstance) throws IOException;
