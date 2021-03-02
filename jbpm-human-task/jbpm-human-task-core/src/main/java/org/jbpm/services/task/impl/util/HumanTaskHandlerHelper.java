@@ -18,6 +18,7 @@ package org.jbpm.services.task.impl.util;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -62,6 +63,9 @@ public class HumanTaskHandlerHelper {
 	}
 	
 	public static Deadlines setDeadlines(Map<String, Object> parameters, List<OrganizationalEntity> businessAdministrators, Environment environment, boolean unboundRepeatableOnly) {
+	    if (parameters == null)
+	        parameters = Collections.emptyMap();
+
 		String notStartedReassign = (String) parameters.get("NotStartedReassign");
 		String notStartedNotify = (String) parameters.get("NotStartedNotify");
 		String notCompletedReassign = (String) parameters.get("NotCompletedReassign");
