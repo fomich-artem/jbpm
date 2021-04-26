@@ -461,6 +461,9 @@ public class ProtobufProcessMarshaller
                                            _mapEntry.getValue().toByteArray(), 
                                            (context.getKnowledgeBase() == null)?null:context.getKnowledgeBase().getRootClassLoader() );
 
+        if (value instanceof VariableValueWrapper)
+            value = ((VariableValueWrapper) value).getValue();
+
         return Collections.singletonMap(_mapEntry.getKey(), value).entrySet().iterator().next();
     }
 
