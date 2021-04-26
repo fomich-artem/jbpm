@@ -49,6 +49,7 @@ import org.jbpm.persistence.api.integration.model.ProcessInstanceView;
 import org.jbpm.persistence.correlation.CorrelationKeyInfo;
 import org.jbpm.persistence.correlation.CorrelationPropertyInfo;
 import org.jbpm.process.instance.InternalProcessRuntime;
+import org.jbpm.process.instance.LockProcessInstanceException;
 import org.jbpm.process.instance.ProcessInstanceManager;
 import org.jbpm.process.instance.impl.ProcessInstanceImpl;
 import org.jbpm.process.instance.timer.TimerManager;
@@ -170,7 +171,7 @@ public class JPAProcessInstanceManager
 			return;
     	String message = "Cannot lock process instances : " + idsToLock + ", processInstanceId : " + processInstanceId;
     	log.error(message + ", heldLocksByAnotherThreads: #0", heldLocksByAnotherThreads);
-		throw new RuntimeException(message);
+		throw new LockProcessInstanceException(message);
     }
 
     @Deprecated
