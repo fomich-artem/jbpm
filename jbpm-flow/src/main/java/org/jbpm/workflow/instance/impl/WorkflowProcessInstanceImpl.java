@@ -851,6 +851,8 @@ public abstract class WorkflowProcessInstanceImpl extends ProcessInstanceImpl
     }
 
     public void addCompletedNodeId(String uniqueId) {
+        if (Boolean.getBoolean("jbpm.completedNodeIds.disabled"))
+            return;
         this.completedNodeIds.add(uniqueId.intern());
     }
 
