@@ -35,11 +35,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Pattern;
 
+import javax.persistence.EntityManager;
+
 import org.drools.core.common.InternalKnowledgeRuntime;
 import org.drools.persistence.api.TransactionManager;
 import org.drools.persistence.api.TransactionManagerHelper;
 import org.jboss.seam.log.Log;
 import org.jboss.seam.log.Logging;
+import org.jbpm.persistence.JpaProcessPersistenceContextManager;
 import org.jbpm.persistence.api.ProcessPersistenceContext;
 import org.jbpm.persistence.api.ProcessPersistenceContextManager;
 import org.jbpm.persistence.api.integration.EventManagerProvider;
@@ -483,7 +486,8 @@ public class JPAProcessInstanceManager
         	ProcessPersistenceContextManager ppcm 
         	    = (ProcessPersistenceContextManager) this.kruntime.getEnvironment().get( EnvironmentName.PERSISTENCE_CONTEXT_MANAGER );
         	ppcm.beginCommandScopedEntityManager();
-        	
+            EntityManager cmdScopedEntityManager = ((JpaProcessPersistenceContextManager)ppcm).getCommandScopedEntityManager();
+
             ProcessPersistenceContext context = ppcm.getProcessPersistenceContext();
             SimpleProfiler.st(" fetch ProcessInstanceInfo"); // profiler !!!
             ProcessInstanceInfo processInstanceInfo = (ProcessInstanceInfo) context.findProcessInstanceInfo( id );
@@ -523,6 +527,8 @@ public class JPAProcessInstanceManager
             }
             if (readOnly) {
                 internalRemoveProcessInstance(processInstance);
+                cmdScopedEntityManager.detach(processInstanceInfo); // removing from cache - it needs to use fresh ProcessInstanceInfo version in the next write-mode access
+                                                                    // that fixes exception "Row was updated or deleted by another transaction"
             }
             return processInstance;
         } finally {
