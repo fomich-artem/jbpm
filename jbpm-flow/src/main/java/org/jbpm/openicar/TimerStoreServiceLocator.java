@@ -16,11 +16,18 @@
 
 package org.jbpm.openicar;
 
-import org.jboss.seam.Component;
-
 /**
  * Timer storage API
- * 
+ *
+ * mosaek (де-Сим, 2026-09-12): канон резолвил стор через Seam
+ * ({@code org.jboss.seam.Component.getInstance( TIMER_STORE_SERVICE_CONTEXT_VARIABLE, true )});
+ * вне контейнера Seam (Spring Boot) реестр недоступен, поэтому стор
+ * выставляется бином явно при старте (JPATimerStoreService &rarr;
+ * {@link #setInstance(TimerStoreService)}). По образцу
+ * org.kie.api.openicar.KnowledgeServiceLocator. Поле
+ * TIMER_STORE_SERVICE_CONTEXT_VARIABLE оставлено для совместимости,
+ * в резолве не участвует.
+ *
  * @author <a href="mailto:a.fomichev@comsoft-corp.ru">Fomichev Artem</a> <br>
  *
  */
@@ -28,8 +35,14 @@ public class TimerStoreServiceLocator {
 
 	public static String TIMER_STORE_SERVICE_CONTEXT_VARIABLE = "timerStoreService";
 
+	private static volatile TimerStoreService instance;
+
+	public static void setInstance(TimerStoreService storeService) {
+		TimerStoreServiceLocator.instance = storeService;
+	}
+
 	public static TimerStoreService getInstance() {
-		return (TimerStoreService) Component.getInstance(TIMER_STORE_SERVICE_CONTEXT_VARIABLE, true);
+		return instance;
 	}
 
 }
