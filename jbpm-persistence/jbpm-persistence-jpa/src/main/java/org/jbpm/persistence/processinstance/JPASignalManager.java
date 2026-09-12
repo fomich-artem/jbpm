@@ -19,10 +19,11 @@ package org.jbpm.persistence.processinstance;
 import java.util.List;
 
 import org.drools.core.common.InternalKnowledgeRuntime;
-import org.jboss.seam.contexts.Contexts;
-import org.jboss.seam.contexts.Lifecycle;
-import org.jboss.seam.log.Log;
-import org.jboss.seam.log.Logging;
+// mosaek (де-Сим 2026-09-12): Seam Contexts/Lifecycle/Log убраны — вне контейнера
+// Seam Lifecycle.beginCall() падает «outside an initialized application»;
+// slf4j вместо org.jboss.seam.log.Log
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.jbpm.persistence.api.ProcessPersistenceContext;
 import org.jbpm.persistence.api.ProcessPersistenceContextManager;
 import org.jbpm.process.core.async.AsyncSignalEventCommand;
@@ -38,7 +39,7 @@ public class JPASignalManager extends DefaultSignalManager {
     private static final String ASYNC_SIGNAL_PREFIX = "ASYNC-";
     private static final Logger logger = LoggerFactory.getLogger(JPASignalManager.class);
 
-    Log log = Logging.getLog(getClass());
+    Logger log = LoggerFactory.getLogger(JPASignalManager.class);
 
     public JPASignalManager(InternalKnowledgeRuntime kruntime) {
         super(kruntime);
@@ -74,8 +75,7 @@ public class JPASignalManager extends DefaultSignalManager {
         }
         
         
-        boolean appContextActive = Contexts.isApplicationContextActive();
-        if (!appContextActive) Lifecycle.beginCall();
+        // mosaek (де-Сим): Seam-лайфцикл не нужен, EM движка авто-join'ится к JTA-tx
         try {
             log.debug("signalEvent... type = #0, event data = #1, thread = #2", type, event, Thread.currentThread());
 
@@ -97,17 +97,14 @@ public class JPASignalManager extends DefaultSignalManager {
                            event );
         //getKnowledgeRuntime().executeQueuedActions();
         } finally {
-            if (!appContextActive) Lifecycle.endCall();
         }
     }
 
     public void signalEvent(long processInstanceId, String type, Object event) {
-        boolean appContextActive = Contexts.isApplicationContextActive();
-        if (!appContextActive) Lifecycle.beginCall();
+        // mosaek (де-Сим): Seam-лайфцикл не нужен, EM движка авто-join'ится к JTA-tx
         try {
             super.signalEvent(processInstanceId, type, event);
         } finally {
-            if (!appContextActive) Lifecycle.endCall();
         }
     }
 

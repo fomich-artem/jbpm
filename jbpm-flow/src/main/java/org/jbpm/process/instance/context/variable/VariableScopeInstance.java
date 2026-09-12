@@ -25,10 +25,11 @@ import java.util.Set;
 
 import org.drools.core.ClassObjectFilter;
 import org.drools.core.event.ProcessEventSupport;
-import org.jboss.seam.contexts.Contexts;
-import org.jboss.seam.contexts.Lifecycle;
-import org.jboss.seam.log.Log;
-import org.jboss.seam.log.Logging;
+// mosaek (де-Сим 2026-09-12): Seam Contexts/Lifecycle/Log убраны — вне контейнера
+// Seam Lifecycle.beginCall() падает «outside an initialized application»;
+// slf4j вместо org.jboss.seam.log.Log
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.jbpm.process.core.context.variable.Variable;
 import org.jbpm.process.core.context.variable.VariableScope;
 import org.jbpm.process.core.context.variable.VariableViolationException;
@@ -52,7 +53,7 @@ public class VariableScopeInstance extends AbstractContextInstance {
 
     private static final long serialVersionUID = 511l;
 
-    private transient Log log = Logging.getLog(getClass());
+    private transient Logger log = LoggerFactory.getLogger(VariableScopeInstance.class);
 
     /* Почему-то jbpm хранит кэш переменных, несмотря на директиву transient.
      * Возможно jBPM вообще никогда не делает десериализацию VariableScopeInstance,
@@ -145,8 +146,7 @@ public class VariableScopeInstance extends AbstractContextInstance {
                 int size = size();
                 if (size == 0 || size <= restoredCnt) return;
                 log.debug("getVariables() - lazy restoring all variable values...");
-                boolean appContextActive = Contexts.isApplicationContextActive();
-                if (!appContextActive) Lifecycle.beginCall();
+                // mosaek (де-Сим): Seam-лайфцикл не нужен
                 try {
                     for (Map.Entry<String, Object> entry : super.entrySet()) {
                         if (entry.getValue() instanceof VariableValueWrapper) {    
@@ -157,7 +157,7 @@ public class VariableScopeInstance extends AbstractContextInstance {
                         }
                     }
                 } finally {
-                    if (!appContextActive) Lifecycle.endCall();
+                    // mosaek (де-Сим): см. выше
                 }
             }
             @Override
