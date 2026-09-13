@@ -25,8 +25,6 @@ import org.drools.persistence.api.TransactionManager;
 import org.drools.persistence.api.TransactionManagerFactory;
 import org.drools.persistence.jpa.JDKCallableJobCommand;
 import org.drools.persistence.jpa.JpaTimerJobInstance;
-import org.jboss.seam.contexts.Contexts;
-import org.jboss.seam.contexts.Lifecycle;
 import org.jbpm.persistence.jta.ContainerManagedTransactionManager;
 import org.jbpm.process.core.async.AsyncExecutionMarker;
 import org.jbpm.process.core.timer.TimerServiceRegistry;
@@ -62,12 +60,16 @@ public class GlobalJpaTimerJobInstance extends JpaTimerJobInstance {
 
     @Override
     public Void call() throws Exception {
+        // mosaek (С4/JBPM-PORT.md, 2026-09-13): Seam-контексты (Contexts/Lifecycle)
+        // УБРАНЫ — вне контейнера beginCall тянет javassist и умирает
+        // NoClassDefFoundError, молча оседая в Future RetriggerCallable
+        // (таймеры перестают стрелять). Контексты и tx на потоке таймера
+        // поднимает порт-слой: TransactionalTimerJob в
+        // CustomThreadPoolSchedulerService (tx через jbpmTransactionTemplate).
         AsyncExecutionMarker.markAsync();
         ExecutableRunner runner = null;
         TransactionManager jtaTm = null;
         boolean success = false;
-        boolean appContextActive = Contexts.isApplicationContextActive();
-        if (!appContextActive) Lifecycle.beginCall();
         try { 
             JDKCallableJobCommand command = new JDKCallableJobCommand( this );
 
@@ -100,7 +102,6 @@ public class GlobalJpaTimerJobInstance extends JpaTimerJobInstance {
             	}
             }
             closeTansactionIfNeeded(jtaTm, success);
-            if (!appContextActive) Lifecycle.endCall();
         }
     }
     
