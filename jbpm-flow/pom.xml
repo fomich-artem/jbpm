@@ -206,10 +206,12 @@
     </dependency>
 
     <!-- openicar dependencies -->
+    <!-- Де-Сим (mosaek, 2026-09-14): jboss-seam снят (SeamELScriptEngine переведён
+         на стандартный javax.el). API нужен только для компиляции — runtime
+         предоставляет javax.el сам потребитель (tomcat-embed-el в mosaek). -->
     <dependency>
-      <groupId>org.jboss.seam</groupId>
-      <artifactId>jboss-seam</artifactId>
-      <type>ejb</type>
+      <groupId>org.jboss.spec.javax.el</groupId>
+      <artifactId>jboss-el-api_3.0_spec</artifactId>
       <scope>provided</scope>
     </dependency>
   </dependencies>

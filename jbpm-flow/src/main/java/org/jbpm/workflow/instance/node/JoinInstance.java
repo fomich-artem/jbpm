@@ -29,8 +29,8 @@ import java.util.Set;
 import javax.script.ScriptContext;
 import javax.script.SimpleScriptContext;
 
-import org.jboss.seam.log.Log;
-import org.jboss.seam.log.Logging;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.jbpm.openicar.seamel.SeamELScriptEngine;
 import org.jbpm.openicar.seamel.SeamELVariableBindings;
 import org.jbpm.workflow.core.node.AsyncEventNode;
@@ -51,7 +51,8 @@ public class JoinInstance extends NodeInstanceImpl {
 
     private static final long serialVersionUID = 510l;
     
-    protected transient Log log = Logging.getLog(getClass());
+    // slf4j вместо org.jboss.seam.log.Log
+    protected transient Logger log = LoggerFactory.getLogger(getClass());
 
     private Map<Long, Integer> triggers = new HashMap<Long, Integer>();
     
@@ -118,7 +119,7 @@ public class JoinInstance extends NodeInstanceImpl {
                         ScriptContext scriptContext = new SimpleScriptContext();
                         scriptContext.setBindings(new SeamELVariableBindings(new NodeInstanceResolverFactory(this)), ScriptContext.ENGINE_SCOPE);
                         value = SeamELScriptEngine.instance().eval(expression, scriptContext);
-                        log.debug("resolved parameter expression [#0] value = #1", expression, value);
+                        log.debug("resolved parameter expression [{}] value = {}", expression, value);
                     } catch (Throwable t) {
                         if (t instanceof RuntimeException) throw (RuntimeException)t;
                         throw new IllegalStateException(t);

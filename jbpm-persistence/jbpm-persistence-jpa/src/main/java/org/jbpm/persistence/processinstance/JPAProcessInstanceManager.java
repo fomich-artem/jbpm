@@ -40,8 +40,8 @@ import javax.persistence.EntityManager;
 import org.drools.core.common.InternalKnowledgeRuntime;
 import org.drools.persistence.api.TransactionManager;
 import org.drools.persistence.api.TransactionManagerHelper;
-import org.jboss.seam.log.Log;
-import org.jboss.seam.log.Logging;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.jbpm.persistence.JpaProcessPersistenceContextManager;
 import org.jbpm.persistence.api.ProcessPersistenceContext;
 import org.jbpm.persistence.api.ProcessPersistenceContextManager;
@@ -84,7 +84,8 @@ public class JPAProcessInstanceManager
 
 	public static final boolean READONLY_DISABLED = Boolean.valueOf(System.getProperty("org.jbpm.persistence.processinstance.JPAProcessInstanceManager.READONLY_DISABLED", "false"));
 
-	Log log = Logging.getLog(getClass());
+	// slf4j вместо org.jboss.seam.log.Log
+	Logger log = LoggerFactory.getLogger(getClass());
 	
     private InternalKnowledgeRuntime kruntime;
     // In a scenario in which 1000's of processes are running daily,
@@ -173,7 +174,7 @@ public class JPAProcessInstanceManager
 		if (success)
 			return;
     	String message = "Cannot lock process instances : " + idsToLock + ", processInstanceId : " + processInstanceId;
-    	log.error(message + ", heldLocksByAnotherThreads: #0", heldLocksByAnotherThreads);
+    	log.error(message + ", heldLocksByAnotherThreads: {}", heldLocksByAnotherThreads);
 		throw new LockProcessInstanceException(message);
     }
 
@@ -183,18 +184,18 @@ public class JPAProcessInstanceManager
 		SimpleProfiler.st(" lock synchronization loop"); // profiler !!!    			
     	for (int iteration = 0; iteration < getLockIterations(); iteration++) {
     		boolean isSuccessfulLocked = false;
-    		log.debug("before synchronized block for lock : #0, thread = #1", idsToLock, Thread.currentThread());
+    		log.debug("before synchronized block for lock : {}, thread = {}", idsToLock, Thread.currentThread());
     		synchronized(processInstanceLocks) {
-    			log.debug("begin synchronized block for lock : #0, thread = #1", idsToLock, Thread.currentThread());
+    			log.debug("begin synchronized block for lock : {}, thread = {}", idsToLock, Thread.currentThread());
     			boolean allIdsIsFree = true;
-    			log.debug("check freedom of #0", idsToLock);
+    			log.debug("check freedom of {}", idsToLock);
     			for (Long idToLock : idsToLock) {
     				if (tlpil.contains(idToLock)) continue;
     				ReentrantLock lock = processInstanceLocks.get(idToLock);
     				if (lock == null) continue;
     				if (lock.isLocked() && !lock.isHeldByCurrentThread()) allIdsIsFree = false;
     			}
-    			log.debug("freedom of #0 : #1", idsToLock, allIdsIsFree);
+    			log.debug("freedom of {} : {}", idsToLock, allIdsIsFree);
     			if (allIdsIsFree) {
     				for (Long idToLock : idsToLock) {
     					if (tlpil.contains(idToLock)) continue;
@@ -203,10 +204,10 @@ public class JPAProcessInstanceManager
     					if (lock == null) {
     						lock = new ReentrantLock();
     						processInstanceLocks.put(idToLock, lock);
-    						log.debug("lock processInstanceId 1 : #0, thread = #1", idToLock, Thread.currentThread());
+    						log.debug("lock processInstanceId 1 : {}, thread = {}", idToLock, Thread.currentThread());
     						lock.lock();
     						tlpil.add(idToLock);
-    						log.debug("processInstanceId locked : #0, thread = #1", idToLock, Thread.currentThread());
+    						log.debug("processInstanceId locked : {}, thread = {}", idToLock, Thread.currentThread());
     						SimpleProfiler.en(" lock processInstanceId"); // profiler !!!
     						continue;
     					}
@@ -215,25 +216,25 @@ public class JPAProcessInstanceManager
     						continue;
     					}
     					try {
-    						log.debug("lock processInstanceId 2 : #0, thread = #1", idToLock, Thread.currentThread());
+    						log.debug("lock processInstanceId 2 : {}, thread = {}", idToLock, Thread.currentThread());
     						lock.tryLock(5, TimeUnit.SECONDS);
     						//Thread.sleep(500);
     					} catch (InterruptedException e) {
     						SimpleProfiler.en(" lock processInstanceId"); // profiler !!!
     						SimpleProfiler.en(" lock synchronization loop"); // profiler !!!    			
     						e.printStackTrace();
-    						log.debug("interrupted synchronized block for lock : #0, thread = #1", idsToLock, Thread.currentThread());
+    						log.debug("interrupted synchronized block for lock : {}, thread = {}", idsToLock, Thread.currentThread());
     						throw new RuntimeException(e);
     					}
     					if (lock.isHeldByCurrentThread()) {
     						tlpil.add(idToLock);
-    						log.debug("processInstanceId locked : #0, thread = #1", idToLock, Thread.currentThread());
+    						log.debug("processInstanceId locked : {}, thread = {}", idToLock, Thread.currentThread());
     					}
     					SimpleProfiler.en(" lock processInstanceId"); // profiler !!!
     				}
     				isSuccessfulLocked = true;
     			}
-    			log.debug("end synchronized block for lock : #0, thread = #1", idsToLock, Thread.currentThread());
+    			log.debug("end synchronized block for lock : {}, thread = {}", idsToLock, Thread.currentThread());
     		}
     		if (isSuccessfulLocked) {
     			SimpleProfiler.en(" lock synchronization loop"); // profiler !!!    			
@@ -354,7 +355,7 @@ public class JPAProcessInstanceManager
 			return;
 		}
     	SimpleProfiler.st(" unlock processInstanceId"); // profiler !!!
-		log.debug("unlock processInstanceId : #0, thread = #1", processInstanceId, Thread.currentThread());
+		log.debug("unlock processInstanceId : {}, thread = {}", processInstanceId, Thread.currentThread());
 		getLocalProcessInstanceLocks().remove(processInstanceId);
     	SimpleProfiler.st(" reentrant unlock"); // profiler !!!
     	tryRemoveObsoleteLock(processInstanceId);
@@ -364,7 +365,7 @@ public class JPAProcessInstanceManager
 		//else if (getLocalProcessInstanceLocks().contains(processInstanceId))
 		//	processInstanceLocks.put(processInstanceId, new ReentrantLock());
     	SimpleProfiler.en(" reentrant unlock"); // profiler !!!
-		log.debug("processInstanceId unlocked : #0, thread = #1", processInstanceId, Thread.currentThread());
+		log.debug("processInstanceId unlocked : {}, thread = {}", processInstanceId, Thread.currentThread());
 		SimpleProfiler.en(" unlock processInstanceId"); // profiler !!!
     }
 
@@ -398,7 +399,7 @@ public class JPAProcessInstanceManager
 
         processInstanceInfo = (ProcessInstanceInfo) context.persist( processInstanceInfo );
 
-        log.debug("addProcessInstance : id = #0, thread = #1", processInstanceInfo.getId(), Thread.currentThread());
+        log.debug("addProcessInstance : id = {}, thread = {}", processInstanceInfo.getId(), Thread.currentThread());
         lockProcessInstance(processInstanceInfo.getId(), false);
 
         ((org.jbpm.process.instance.ProcessInstance) processInstance).setId( processInstanceInfo.getId() );
@@ -434,7 +435,7 @@ public class JPAProcessInstanceManager
     }
 
     public ProcessInstance getProcessInstance(long id, boolean readOnly) {
-        log.debug("getProcessInstance : id = #0, thread = #1", id, Thread.currentThread());
+        log.debug("getProcessInstance : id = {}, thread = {}", id, Thread.currentThread());
 
         InternalRuntimeManager manager = (InternalRuntimeManager) kruntime.getEnvironment().get(EnvironmentName.RUNTIME_MANAGER);
         if (manager != null) {
@@ -453,7 +454,7 @@ public class JPAProcessInstanceManager
         processInstance = (org.jbpm.process.instance.ProcessInstance) this.processInstances.get(id);
         if (processInstance != null) {
             if (processInstance.getKnowledgeRuntime() == null) {
-                log.warn("processInstance.kruntime is null, i'll try to fix this... stackTrace:\r\n#0", getStackTracePrint());
+                log.warn("processInstance.kruntime is null, i'll try to fix this... stackTrace:\r\n{}", getStackTracePrint());
                 processInstance.setKnowledgeRuntime(kruntime);
             }
             if (((WorkflowProcessInstanceImpl) processInstance).isPersisted() && !readOnly) {
@@ -465,7 +466,7 @@ public class JPAProcessInstanceManager
                 ProcessInstanceInfo processInstanceInfo = (ProcessInstanceInfo) context.findProcessInstanceInfo( id );
                 SimpleProfiler.en(" fetch ProcessInstanceInfo"); // profiler !!!
                 if ( processInstanceInfo == null ) {
-                    log.debug("ProcessInstanceInfo not found : #0, stackTrace:\r\n#1", id, getStackTracePrint());
+                    log.debug("ProcessInstanceInfo not found : {}, stackTrace:\r\n{}", id, getStackTracePrint());
                    	unlockProcessInstance(id);
                     return null;
                 }  
@@ -494,7 +495,7 @@ public class JPAProcessInstanceManager
             SimpleProfiler.en(" fetch ProcessInstanceInfo"); // profiler !!!
             if ( processInstanceInfo == null ) {
                 SimpleProfiler.en(" restore ProcessInstance from db"); // profiler !!!
-                log.debug("ProcessInstanceInfo not found : #0, stackTrace:\r\n#1", id, getStackTracePrint());
+                log.debug("ProcessInstanceInfo not found : {}, stackTrace:\r\n{}", id, getStackTracePrint());
                 if (!readOnly)
                 	unlockProcessInstance(id);
                 return null;
@@ -561,7 +562,7 @@ public class JPAProcessInstanceManager
     }
 
     public void internalRemoveProcessInstance(ProcessInstance processInstance) {
-        //log.debug("internalRemoveProcessInstance : id = #0, thread = #1", processInstance.getId(), Thread.currentThread());
+        //log.debug("internalRemoveProcessInstance : id = {}, thread = {}", processInstance.getId(), Thread.currentThread());
         processInstances.remove( processInstance.getId() );
     }
     
@@ -570,7 +571,7 @@ public class JPAProcessInstanceManager
             ((ProcessInstanceImpl) processInstance).disconnect();
         }
 
-    	log.debug("clearProcessInstances... unlock processes : #0", getLocalProcessInstanceLocks());
+    	log.debug("clearProcessInstances... unlock processes : {}", getLocalProcessInstanceLocks());
         for (Long processInstanceId : new ArrayList<Long>(getLocalProcessInstanceLocks())) {			
         	unlockProcessInstance(processInstanceId);
 		}

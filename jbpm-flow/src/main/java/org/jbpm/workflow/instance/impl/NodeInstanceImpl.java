@@ -28,8 +28,6 @@ import java.util.Objects;
 
 import org.drools.core.common.InternalKnowledgeRuntime;
 import org.drools.core.spi.ProcessContext;
-import org.jboss.seam.log.Log;
-import org.jboss.seam.log.Logging;
 import org.jbpm.process.core.Context;
 import org.jbpm.process.core.ContextContainer;
 import org.jbpm.process.core.context.exception.ExceptionScope;
@@ -77,7 +75,8 @@ public abstract class NodeInstanceImpl implements org.jbpm.workflow.instance.Nod
 	private static final long serialVersionUID = 510l;
 	protected static final Logger logger = LoggerFactory.getLogger(NodeInstanceImpl.class);
 
-    Log log = Logging.getLog(getClass());
+    // slf4j вместо org.jboss.seam.log.Log
+    Logger log = LoggerFactory.getLogger(getClass());
 	
 	private long id = -1;
     private long nodeId;
@@ -214,7 +213,8 @@ public abstract class NodeInstanceImpl implements org.jbpm.workflow.instance.Nod
             internalTrigger(from, type);
         }
         catch (Exception e) {
-            log.error("trigger failed... variables in process context: #0", e, persistentVariableStrings);
+            // mosaek: slf4j кладёт стек только за ПОСЛЕДНИМ не-плейсхолдерным аргументом — Throwable в конец
+            log.error("trigger failed... variables in process context: {}", persistentVariableStrings, e);
             if (e instanceof WorkflowRuntimeException)
                 throw (WorkflowRuntimeException) e;
             throw new WorkflowRuntimeException(this, getProcessInstance(), e);

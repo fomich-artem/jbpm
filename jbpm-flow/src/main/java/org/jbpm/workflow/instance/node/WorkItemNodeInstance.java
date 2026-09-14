@@ -37,8 +37,6 @@ import org.jbpm.process.core.Context;
 import org.jbpm.process.core.ContextContainer;
 import org.jbpm.process.core.Work;
 import org.jbpm.process.core.context.exception.ExceptionScope;
-import org.jboss.seam.log.Log;
-import org.jboss.seam.log.Logging;
 import org.jbpm.openicar.seamel.SeamELScriptEngine;
 import org.jbpm.openicar.seamel.SeamELVariableBindings;
 import org.jbpm.process.core.context.variable.Variable;
@@ -98,7 +96,8 @@ public class WorkItemNodeInstance extends StateBasedNodeInstance implements Even
     private long workItemId = -1;
     protected transient WorkItem workItem;
 
-    protected transient Log log = Logging.getLog(getClass());
+    // slf4j вместо org.jboss.seam.log.Log
+    protected transient Logger log = LoggerFactory.getLogger(getClass());
 
     private long exceptionHandlingProcessInstanceId = -1;
 
@@ -251,20 +250,20 @@ public class WorkItemNodeInstance extends StateBasedNodeInstance implements Even
                         } else {
                             parameterValue = MVELSafeHelper.getEvaluator().eval(expression, new NodeInstanceResolverFactory(this));
                         }
-                        log.debug("resolved incoming association source [#0] value = #1", expression, parameterValue);
+                        log.debug("resolved incoming association source [{}] value = {}", expression, parameterValue);
                     } catch (Throwable t) {
                         /*
                         logger.error("Could not find variable scope for variable {}", association.getSources().get(0));
                         logger.error("when trying to execute Work Item {}", workItemNode.getWork().getName());
                         logger.error("Continuing without setting parameter.");
                          */
-                        log.error("Could not find variable scope for variable/expression [#0] when trying to execute Work Item [#1]", expression, workItemNode.getWork().getName());
+                        log.error("Could not find variable scope for variable/expression [{}] when trying to execute Work Item [{}]", expression, workItemNode.getWork().getName());
                         if (t instanceof RuntimeException) throw (RuntimeException)t;
                         throw new IllegalStateException(t);
                     }
                 }
                 if ((parameterValue != null) || (variableScopeInstance != null)) {
-                    log.debug("set work item parameter [#0] value [#1] from incomming association [#2]", association.getTarget(), parameterValue, expression);
+                    log.debug("set work item parameter [{}] value [{}] from incomming association [{}]", association.getTarget(), parameterValue, expression);
                     workItem.setParameter(association.getTarget(), parameterValue);
                 }
             } else {
@@ -290,12 +289,12 @@ public class WorkItemNodeInstance extends StateBasedNodeInstance implements Even
                         }
                         Object value = SeamELScriptEngine.instance().eval(expression, scriptContext);
                         String valueString = value == null ? "" : value.toString();
-                        log.debug("resolved parameter expression [#0] valueString = #1", expression, valueString);
-                        log.debug("set work item parameter [#0] value [#1]", entry.getKey(), valueString);
+                        log.debug("resolved parameter expression [{}] valueString = {}", expression, valueString);
+                        log.debug("set work item parameter [{}] value [{}]", entry.getKey(), valueString);
                         ((WorkItem) workItem).setParameter(entry.getKey(), valueString);
                     }
                 } catch (Throwable t) {
-                    log.error("Could not find variable scope for variable/expression [#0] when trying to execute Work Item [#1]", expression, workItemNode.getWork().getName());
+                    log.error("Could not find variable scope for variable/expression [{}] when trying to execute Work Item [{}]", expression, workItemNode.getWork().getName());
                     if (t instanceof RuntimeException) throw (RuntimeException)t;
                     throw new IllegalStateException(t);
                 }

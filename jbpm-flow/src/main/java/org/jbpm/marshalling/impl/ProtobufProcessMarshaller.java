@@ -39,8 +39,8 @@ import org.drools.core.process.instance.impl.WorkItemImpl;
 import org.drools.serialization.protobuf.PersisterHelper;
 import org.drools.serialization.protobuf.ProtobufMessages;
 import org.drools.serialization.protobuf.ProtobufMessages.Header;
-import org.jboss.seam.log.Log;
-import org.jboss.seam.log.Logging;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.jbpm.marshalling.impl.JBPMMessages.ProcessTimer.TimerInstance.Builder;
 import org.jbpm.marshalling.impl.JBPMMessages.StringToObjectMapEntry;
 import org.jbpm.marshalling.impl.JBPMMessages.Variable;
@@ -67,7 +67,8 @@ public class ProtobufProcessMarshaller
 		persistWorkItemVars = turnOn;
 	}
 
-	protected static Log log = Logging.getLog(ProtobufProcessMarshaller.class);
+	// slf4j вместо org.jboss.seam.log.Log
+	protected static Logger log = LoggerFactory.getLogger(ProtobufProcessMarshaller.class);
 
     public void writeProcessInstances(MarshallerWriteContext context) throws IOException {
         ProtobufMessages.ProcessData.Builder _pdata = (ProtobufMessages.ProcessData.Builder) context.getParameterObject();
@@ -288,10 +289,10 @@ public class ProtobufProcessMarshaller
             VariableService variableService = KnowledgeServiceLocator.getInstance(VariableService.class);
 
             if (!(value instanceof VariableValueWrapper)) {
-                log.debug("convert variable to VariableValueWrapper: name = #0, from value = #1", name, value);
+                log.debug("convert variable to VariableValueWrapper: name = {}, from value = {}", name, value);
                 value = variableService.wrapVariable(value);
             } else {
-                log.debug("variable is already VariableValueWrapper of type #0", value.getClass().getCanonicalName());
+                log.debug("variable is already VariableValueWrapper of type {}", value.getClass().getCanonicalName());
             }
 
             Integer index = context.getStrategyIndex( strategy );
@@ -314,10 +315,10 @@ public class ProtobufProcessMarshaller
                 ObjectMarshallingStrategy strategy = context.getObjectMarshallingStrategyStore().getStrategyObject( value );
 
                 if (!(value instanceof VariableValueWrapper)) {
-                    log.debug("convert variable to VariableValueWrapper: name = #0, from value = #1", key, value);
+                    log.debug("convert variable to VariableValueWrapper: name = {}, from value = {}", key, value);
                     value = variableService.wrapVariable(value);
                 } else {
-                    log.debug("variable is already VariableValueWrapper of type #0", value.getClass().getCanonicalName());
+                    log.debug("variable is already VariableValueWrapper of type {}", value.getClass().getCanonicalName());
                 }
 
                 Integer index = context.getStrategyIndex( strategy );
@@ -347,10 +348,10 @@ public class ProtobufProcessMarshaller
                 ObjectMarshallingStrategy strategy = context.getObjectMarshallingStrategyStore().getStrategyObject( value );
 
                 if (!(value instanceof VariableValueWrapper)) {
-                    log.debug("convert variable to VariableValueWrapper: name = #0, from value = #1", key, value);
+                    log.debug("convert variable to VariableValueWrapper: name = {}, from value = {}", key, value);
                     value = variableService.wrapVariable(value);
                 } else {
-                    log.debug("variable is already VariableValueWrapper of type #0", value.getClass().getCanonicalName());
+                    log.debug("variable is already VariableValueWrapper of type {}", value.getClass().getCanonicalName());
                 }
 
                 Integer index = context.getStrategyIndex( strategy );

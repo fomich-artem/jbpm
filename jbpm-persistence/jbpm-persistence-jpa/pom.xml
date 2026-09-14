@@ -96,13 +96,8 @@
     </dependency>
     
     <!-- openicar dependencies -->
-    <dependency>
-      <groupId>org.jboss.seam</groupId>
-      <artifactId>jboss-seam</artifactId>
-      <type>ejb</type>
-      <scope>provided</scope>
-    </dependency>
-    
+    <!-- Де-Сим (mosaek, 2026-09-14): jboss-seam снят (JPAProcessInstanceManager на slf4j) -->
+
     <!-- Test -->
     <dependency>
       <groupId>org.jbpm</groupId>
@@ -246,8 +241,7 @@
               org.kie.internal.process,              
               org.kie.internal.runtime.manager,
               org.kie.internal.runtime.manager.context,
-              org.slf4j
-              ,org.jboss.seam.*,
+              org.slf4j,
               org.kie.api.openicar.*
             </Import-Package>
             <Export-Package>

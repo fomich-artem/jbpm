@@ -21,11 +21,17 @@ import java.io.Reader;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 
+import javax.el.ArrayELResolver;
+import javax.el.BeanELResolver;
+import javax.el.CompositeELResolver;
 import javax.el.ELContext;
 import javax.el.ELException;
 import javax.el.ELResolver;
 import javax.el.ExpressionFactory;
 import javax.el.FunctionMapper;
+import javax.el.ListELResolver;
+import javax.el.MapELResolver;
+import javax.el.ResourceBundleELResolver;
 import javax.el.ValueExpression;
 import javax.el.VariableMapper;
 import javax.script.Bindings;
@@ -33,27 +39,57 @@ import javax.script.ScriptContext;
 import javax.script.ScriptException;
 import javax.script.SimpleBindings;
 
-import org.jboss.seam.el.EL;
-import org.jboss.seam.el.SeamExpressionFactory;
-import org.jboss.seam.log.Log;
-import org.jboss.seam.log.Logging;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * @author <a href="mailto:a.fomichev@comsoft-corp.ru">Fomichev Artem</a>
  */
 public class SeamELScriptEngine /*extends AbstractScriptEngine*/ {
 
-	Log log = Logging.getLog(getClass());
+	// slf4j вместо org.jboss.seam.log.Log
+	Logger log = LoggerFactory.getLogger(getClass());
 	
 	private ExpressionFactory exprFactory;
 
 	public static SeamELScriptEngine instance() {
 		return new SeamELScriptEngine();
 	}
-	
+
+	/**
+	 * Де-Сим хук (mosaek-порт, 2026-09-14): резолв идентификатора EL, когда
+	 * Seam-контекст неактивен. В каноне `#{componentName.property}` резолвится
+	 * через Seam Context/Init (SeamELResolver.resolveBase →
+	 * Init.getRootNamespace().getComponentInstance); в порт-окружении без
+	 * bootstrap'а Seam это молча даёт null. Хук вызывается ПОСЛЕ проверки
+	 * script-биндингов (процессные переменные имеют приоритет — канонный
+	 * порядок VariableMapper → ELResolver сохраняется) и до fallback'а в Seam.
+	 * Порт регистрирует резолвер Spring-бинов при старте контекста
+	 * (SeamElBeanBridge); НЕ тащить обратно в ekie/canon.
+	 */
+	public interface BeanResolver {
+		Object resolve(String name);
+	}
+
+	private static volatile BeanResolver beanResolver;
+
+	public static void setBeanResolver(BeanResolver resolver) {
+		beanResolver = resolver;
+	}
+
+	public static BeanResolver getBeanResolver() {
+		return beanResolver;
+	}
+
 	public SeamELScriptEngine()
 	{
-		this.exprFactory = SeamExpressionFactory.INSTANCE;
+		// Де-Сим (mosaek, 2026-09-14): вместо SeamExpressionFactory (Seam-цепочка
+		// резолверов) — стандартная фабрика EL. Имплементацию находит ServiceLoader'ом
+		// (в порт-окружении mosaek — tomcat-embed-el / jboss-el из classpath).
+		// Идентификаторы резолвятся VariableMapper'ом (script-биндинги процессов +
+		// хук BeanResolver), базовые свойства — стандартным BeanELResolver (см.
+		// WrappedSeamELContext). НЕ тащить обратно в ekie/canon.
+		this.exprFactory = ExpressionFactory.newInstance();
 	}
 
 	public Bindings createBindings() {
@@ -62,14 +98,14 @@ public class SeamELScriptEngine /*extends AbstractScriptEngine*/ {
 
 	public Object eval(String script, ScriptContext ctx) throws ScriptException {
 		if (script != null) script = script.trim();
-		log.debug("EVALUATE 1: #0", script);
+		log.debug("EVALUATE 1: {}", script);
 		ELContext context = toELContext(ctx);
 		ValueExpression valueExpression = parse(script, context);
 		return evalExpr(valueExpression, context);
 	}
 
 	public Object eval(Reader reader, ScriptContext ctx) throws ScriptException {
-		log.debug("EVALUATE 2: #0", reader);
+		log.debug("EVALUATE 2: {}", reader);
 		return eval(readFully(reader), ctx);
 	}
 
@@ -105,14 +141,16 @@ public class SeamELScriptEngine /*extends AbstractScriptEngine*/ {
 
 	private class WrappedSeamELContext extends ELContext {
 //		private final ScriptContext ctx;
-		private ELContext seamELContext = EL.createELContext();
 		private VariableMapper varMapper;
 		private FunctionMapper funcMapper;
 
 		private WrappedSeamELContext(ScriptContext ctx) {
 //			this.ctx = ctx;
-			varMapper = new VariableMapperImpl(ctx, seamELContext.getVariableMapper());
-			funcMapper = new FunctionMapperImpl(ctx, seamELContext.getFunctionMapper());
+			// Де-Сим (mosaek): родительские mapper'ы Seam-контекста больше не
+			// существуют; код ниже рассчитан на null-parent (как и раньше —
+			// в порт-окружении они были no-op)
+			varMapper = new VariableMapperImpl(ctx, null);
+			funcMapper = new FunctionMapperImpl(ctx, null);
 		}
 
 		@Override
@@ -122,13 +160,22 @@ public class SeamELScriptEngine /*extends AbstractScriptEngine*/ {
 
 		@Override
 		public FunctionMapper getFunctionMapper() {
-//			return seamELContext.getFunctionMapper();
 			return funcMapper;
 		}
 
+		// Де-Сим (mosaek): вместо Seam-ELResolver-цепочки (Contexts/Init) —
+		// стандартные резолверы EL. Идентификаторы `#{name}` резолвятся
+		// VariableMapper'ом (script-биндинги + BeanResolver-хук), доступ
+		// к свойствам `#{bean.prop}` — BeanELResolver'ом.
 		@Override
 		public ELResolver getELResolver() {
-			return seamELContext.getELResolver();
+			CompositeELResolver resolver = new CompositeELResolver();
+			resolver.add(new ArrayELResolver(true));
+			resolver.add(new ListELResolver(true));
+			resolver.add(new MapELResolver(true));
+			resolver.add(new ResourceBundleELResolver());
+			resolver.add(new BeanELResolver(true));
+			return resolver;
 		}
 	}
 
@@ -192,8 +239,8 @@ public class SeamELScriptEngine /*extends AbstractScriptEngine*/ {
 			{
 				Object value = this.ctx.getAttribute(variable, scope);
 
-				log.debug("RESOLVED VALUE = [#0]", value);
-				log.debug("VALUE CLASS: #0", (value != null ? value.getClass() : null));
+				log.debug("RESOLVED VALUE = [{}]", value);
+				log.debug("VALUE CLASS: {}", (value != null ? value.getClass() : null));
 
 				if (value instanceof ValueExpression)
 				{
@@ -209,6 +256,20 @@ public class SeamELScriptEngine /*extends AbstractScriptEngine*/ {
 				return exprFactory.createValueExpression(value, Object.class);
 			}
 
+			// де-Сим хук (mosaek): идентификатор не в скрипт-биндингах —
+			// пробуем локатор бинов до fallback'а в Seam-контекст
+			BeanResolver resolver = beanResolver;
+			if (resolver != null)
+			{
+				Object bean = resolver.resolve(variable);
+
+				if (bean != null)
+				{
+					log.debug("RESOLVED VIA BEAN RESOLVER = [{}]", bean);
+					return exprFactory.createValueExpression(bean, Object.class);
+				}
+			}
+
 			return null;
 		}
 
@@ -222,7 +283,7 @@ public class SeamELScriptEngine /*extends AbstractScriptEngine*/ {
 
 		@Override
 		public ValueExpression resolveVariable(String variable) {
-			log.debug("RESOLVE VARIABLE [#0]", variable);
+			log.debug("RESOLVE VARIABLE [{}]", variable);
 
 			ValueExpression result = _resolveVariable(variable);
 			if (result == null && parentVariableMapper != null) result = parentVariableMapper.resolveVariable(variable);
@@ -232,7 +293,7 @@ public class SeamELScriptEngine /*extends AbstractScriptEngine*/ {
 		@Override
 		public ValueExpression setVariable(String variable, ValueExpression value)
 		{
-			log.debug("SET VARIABLE [#0] with value = #1", variable, value);
+			log.debug("SET VARIABLE [{}] with value = {}", variable, value);
 
 			if (parentVariableMapper != null) {
 				return parentVariableMapper.setVariable(variable, value);
@@ -249,7 +310,7 @@ public class SeamELScriptEngine /*extends AbstractScriptEngine*/ {
 	{
 		try
 		{
-			log.debug("PARSE SCRIPT: #0", script);
+			log.debug("PARSE SCRIPT: {}", script);
 			return this.exprFactory.createValueExpression(context, script, Object.class);
 		}
 		catch (ELException elexp)
@@ -263,7 +324,7 @@ public class SeamELScriptEngine /*extends AbstractScriptEngine*/ {
 	{
 		try
 		{
-			log.debug("EVALUALTE EXPRESSION: #0", (expr != null ? expr.getExpressionString() : ""));
+			log.debug("EVALUALTE EXPRESSION: {}", (expr != null ? expr.getExpressionString() : ""));
 			return expr.getValue(context);
 		}
 		catch (ELException elexp)

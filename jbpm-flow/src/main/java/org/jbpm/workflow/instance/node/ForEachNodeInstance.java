@@ -29,8 +29,8 @@ import javax.script.SimpleScriptContext;
 import org.drools.mvel.MVELSafeHelper;
 import org.kie.api.openicar.profiler.SimpleProfiler;
 import org.jbpm.process.core.ContextContainer;
-import org.jboss.seam.log.Log;
-import org.jboss.seam.log.Logging;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.jbpm.openicar.seamel.SeamELScriptEngine;
 import org.jbpm.openicar.seamel.SeamELVariableBindings;
 import org.jbpm.process.core.context.variable.VariableScope;
@@ -57,7 +57,8 @@ public class ForEachNodeInstance extends CompositeContextNodeInstance {
 
     private static final String TEMP_OUTPUT_VAR = "foreach_output";
 
-    protected transient Log log = Logging.getLog(getClass());
+    // slf4j вместо org.jboss.seam.log.Log
+    protected transient Logger log = LoggerFactory.getLogger(getClass());
 
     private int sequentialCounter = 0;
 
@@ -120,9 +121,9 @@ public class ForEachNodeInstance extends CompositeContextNodeInstance {
                 } else {
                     collection = MVELSafeHelper.getEvaluator().eval(collectionExpression, new NodeInstanceResolverFactory(this));
                 }
-                log.debug("resolved collection expression [#0] value = #1", collectionExpression, collection);
+                log.debug("resolved collection expression [{}] value = {}", collectionExpression, collection);
             } catch (Throwable t) {
-                log.error("Could not resolve collection expression [#0]", collectionExpression);
+                log.error("Could not resolve collection expression [{}]", collectionExpression);
                 throw new IllegalArgumentException(
                         "Could not find collection " + collectionExpression);
             }
@@ -209,7 +210,7 @@ public class ForEachNodeInstance extends CompositeContextNodeInstance {
         @SuppressWarnings({"unchecked", "rawtypes"})
         public void internalTrigger(org.kie.api.runtime.process.NodeInstance from, String type) {
             if (log.isDebugEnabled())
-			    log.debug("internalTrigger [#0] from [#1] node instances : [#2]", type, from, getNodeInstanceContainer().getNodeInstances());
+			    log.debug("internalTrigger [{}] from [{}] node instances : [{}]", type, from, getNodeInstanceContainer().getNodeInstances());
         	Map<String, Object> tempVariables = new HashMap<>();
             VariableScopeInstance subprocessVariableScopeInstance = null;
             if (getForEachNode().getOutputVariableName() != null) {
