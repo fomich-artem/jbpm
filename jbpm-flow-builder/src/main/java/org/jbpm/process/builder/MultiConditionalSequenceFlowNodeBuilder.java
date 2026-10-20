@@ -68,6 +68,10 @@ public class MultiConditionalSequenceFlowNodeBuilder implements ProcessNodeBuild
                 ruleConstraint.setName( constraint.getName() );
                 ruleConstraint.setPriority( constraint.getPriority() );
                 ruleConstraint.setDefault( constraint.isDefault() );
+                // mosaek: копировать текст условия, как SplitNodeBuilder — иначе
+                // в kbase constraint.getConstraint() == null (runtime MVEL тексту
+                // не нужен, но читатели текста — напр. outcome-парсер — падают)
+                ruleConstraint.setConstraint( constraint.getConstraint() );
                 ((NodeImpl) node).setConstraint( outgoingConnection, ruleConstraint );
             } else if ( "code".equals( constraint.getType() ) ) {
                 ReturnValueConstraintEvaluator returnValueConstraint = new ReturnValueConstraintEvaluator();
@@ -75,6 +79,8 @@ public class MultiConditionalSequenceFlowNodeBuilder implements ProcessNodeBuild
                 returnValueConstraint.setName( constraint.getName() );
                 returnValueConstraint.setPriority( constraint.getPriority() );
                 returnValueConstraint.setDefault( constraint.isDefault() );
+                // mosaek: см. комментарий к ruleConstraint выше
+                returnValueConstraint.setConstraint( constraint.getConstraint() );
                 ((NodeImpl) node).setConstraint( outgoingConnection, returnValueConstraint );
 
                 ReturnValueDescr returnValueDescr = new ReturnValueDescr();
