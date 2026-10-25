@@ -20,6 +20,8 @@ import java.io.IOException;
 import java.io.Reader;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.beans.FeatureDescriptor;
+import java.util.Iterator;
 
 import javax.el.ArrayELResolver;
 import javax.el.BeanELResolver;
@@ -175,7 +177,66 @@ public class SeamELScriptEngine /*extends AbstractScriptEngine*/ {
 			resolver.add(new MapELResolver(true));
 			resolver.add(new ResourceBundleELResolver());
 			resolver.add(new BeanELResolver(true));
+			// Де-Сим (mosaek, 2026-10-24): канонная Seam-цепочка (SeamELResolver,
+			// см. comsoft WrappedSeamELContext → EL.createELContext()) была
+			// снисходительна к КОРНЕВЫМ идентификаторам: неразрешённый `#{name}`
+			// давал resolved-null, поэтому канонные jbpm5-процессы (десятилетия
+			// в проде) полагаются на `#{empty way}` / `#{way eq '...'}` при
+			// ОТСУТСТВУЮЩЕЙ переменной (напр. AISBD.RequestMTR_agreement,
+			// стартовый XOR). Стандартные резолверы корневые не берут → JUEL
+			// кидал PropertyNotFoundException. Резолвер в конце цепочки
+			// возвращает канонное поведение: root-идентификатор → resolved
+			// null (свойства `bean.prop` не затронуты — их раньше берёт
+			// BeanELResolver). НЕ тащить обратно в ekie/canon.
+			resolver.add(new LenientRootELResolver());
 			return resolver;
+		}
+	}
+
+	// см. комментарий в getELResolver()
+	private static class LenientRootELResolver extends ELResolver
+	{
+		@Override
+		public Object getValue(ELContext context, Object base, Object property)
+		{
+			if (base == null)
+			{
+				context.setPropertyResolved(true);
+			}
+			return null;
+		}
+
+		@Override
+		public void setValue(ELContext context, Object base, Object property, Object value)
+		{
+		}
+
+		@Override
+		public boolean isReadOnly(ELContext context, Object base, Object property)
+		{
+			if (base == null)
+			{
+				context.setPropertyResolved(true);
+			}
+			return true;
+		}
+
+		@Override
+		public Class<?> getType(ELContext context, Object base, Object property)
+		{
+			return null;
+		}
+
+		@Override
+		public Iterator<FeatureDescriptor> getFeatureDescriptors(ELContext context, Object base)
+		{
+			return null;
+		}
+
+		@Override
+		public Class<?> getCommonPropertyType(ELContext context, Object base)
+		{
+			return Object.class;
 		}
 	}
 
