@@ -348,5 +348,9 @@ public abstract class NodeImpl implements Node, Serializable, ContextResolver {
     public Map<ConnectionRef, Constraint> getConstraints() {
         return Collections.unmodifiableMap( this.constraints );
     }
+
+    public void clearConstraints() {
+        this.constraints.clear();
+    }
     
 }

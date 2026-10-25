@@ -343,7 +343,7 @@ public class ProcessHandler extends BaseAbstractHandler implements Handler {
 			for (SequenceFlow connection: connections) {
 				String sourceRef = connection.getSourceRef();
                 Node source = findNodeByIdOrUniqueIdInMetadata(nodeContainer, sourceRef, "Could not find source node for connection:" + sourceRef);
-                
+
                 if (source instanceof EventNode) {
                     for (EventFilter eventFilter : ((EventNode) source).getEventFilters()) {
                         if (eventFilter instanceof EventTypeFilter) {
@@ -356,17 +356,17 @@ public class ProcessHandler extends BaseAbstractHandler implements Handler {
                         }
                     }
                 }
-                
+
                 String targetRef = connection.getTargetRef();
                 Node target = findNodeByIdOrUniqueIdInMetadata(nodeContainer, targetRef, "Could not find target node for connection:" + targetRef);
 
-				
+
 				Connection result = new ConnectionImpl(
-					source, NodeImpl.CONNECTION_DEFAULT_TYPE, 
+					source, NodeImpl.CONNECTION_DEFAULT_TYPE,
 					target, NodeImpl.CONNECTION_DEFAULT_TYPE);
 				result.setMetaData("bendpoints", connection.getBendpoints());
 				result.setMetaData("UniqueId", connection.getId());
-				
+
 				if ("true".equals(System.getProperty("jbpm.enable.multi.con"))){
 					NodeImpl nodeImpl = (NodeImpl) source;
 					Constraint constraint = buildConstraint(connection, nodeImpl);
@@ -374,13 +374,25 @@ public class ProcessHandler extends BaseAbstractHandler implements Handler {
 						nodeImpl.addConstraint(new ConnectionRef(connection.getId(), target.getId(), NodeImpl.CONNECTION_DEFAULT_TYPE),
 								constraint);
 					}
-					
+
 				} else if (source instanceof Split) {
 					Split split = (Split) source;
 					Constraint constraint = buildConstraint(connection, split);
 					split.addConstraint(
 						new ConnectionRef(connection.getId(), target.getId(), NodeImpl.CONNECTION_DEFAULT_TYPE),
 						constraint);
+				}
+			}
+			// multi-con: for a non-gateway node with a single outgoing connection, the condition is not a control condition —
+			// remove it to avoid compilation (historical processes may contain extraneous/junk conditions)
+			if ("true".equals(System.getProperty("jbpm.enable.multi.con"))) {
+				for (Node node: nodeContainer.getNodes()) {
+					if (node instanceof Split) {
+						continue;
+					}
+					if (node.getOutgoingConnections(NodeImpl.CONNECTION_DEFAULT_TYPE).size() < 2) {
+						((NodeImpl) node).clearConstraints();
+					}
 				}
 			}
 		}
