@@ -126,14 +126,10 @@ public class PerRequestRuntimeManager extends AbstractRuntimeManager {
     	if (isClosed()) {
     		throw new IllegalStateException("Runtime manager " + identifier + " is already closed");
     	}
-        // mosaek (2026-09-13): валидация ослаблена — патч «fixed Row was updated...»
-        // рассчитан на контейнерный per-request жизненный цикл (JBoss). В порту
-        // mosaek движок-синглтон живёт через Jbpm5Engine поверх Narayana, и
-        // thread-local запись законно отсутствует (первый запрос после старта),
-        // диспожена (после afterCompletion предыдущей tx) или не имеет
-        // материализованной kie-сессии (ленивый движок, kieSessionId == null —
-        // сравнение с long даёт NPE). Валидируем только когда есть с чем:
-        // реальный мисматч материализованных идентификаторов по-прежнему ошибка.
+        // mosaek: container-style per-request validation does not hold here —
+        // the thread-local entry may be legitimately absent/disposed or the
+        // session not materialized yet (lazy engine, null id). Validate only
+        // when there is something to compare; a real id mismatch is still an error.
         RuntimeEngine runtimeInUse = local.get().get(identifier);
         if (runtimeInUse == null || ((RuntimeEngineImpl) runtimeInUse).isDisposed()) {
             return;
