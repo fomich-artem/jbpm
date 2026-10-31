@@ -202,6 +202,10 @@ public class PerRequestRuntimeManager extends AbstractRuntimeManager {
         } catch(Exception e) {
            // do nothing 
         }
+        // mosaek: stale RuntimeEngine survives close() in the static thread-local;
+        // after an engine restart getRuntimeEngine returned a closed manager
+        // ("Runtime manager ... is already closed"). Purge our identifier entry.
+        local.get().remove(identifier);
         super.close();
         factory.close();
     }
